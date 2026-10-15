@@ -10,6 +10,7 @@ import { auth, db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { solicitarVinculoPorCodigo, concluirVinculoAprovado } from '../services/vinculo';
+import { desregistrarDispositivoPush } from '../services/pushNotifications';
 import { AppText as Text, AppTextInput as TextInput } from '../components/AppText';
 import { KeyboardScreen } from '../components/KeyboardScreen';
 import { formatarCPF, formatarTelefoneBR, somenteDigitos, validarCPF, validarTelefoneBR } from '../utils/validacao';
@@ -67,9 +68,7 @@ export default function Perfil({ navigation }: any) {
     if (!nome.trim()) return Alert.alert('Perfil', 'Informe seu nome.');
     if (!validarCPF(cpf)) return Alert.alert('CPF inválido', 'Informe um CPF válido no formato 000.000.000-00.');
     if (!validarTelefoneBR(telefone)) return Alert.alert('Telefone inválido', 'Informe um telefone brasileiro válido com DDD, por exemplo (53) 99999-9999.');
-    if (perfil.tipo === 'morador' && (!bloco.trim() || !apartamento.trim())) {
-      return Alert.alert('Perfil', 'Informe bloco e apartamento.');
-    }
+    if (perfil.tipo === 'morador' && (!bloco.trim() || !apartamento.trim())) return Alert.alert('Perfil', 'Informe bloco e apartamento.');
     try {
       setSalvando(true);
       await updateDoc(doc(db, 'usuarios', user.uid), {
@@ -84,42 +83,29 @@ export default function Perfil({ navigation }: any) {
       Alert.alert('Perfil atualizado', 'As alterações já foram sincronizadas com o aplicativo.');
     } catch (e:any) {
       Alert.alert('Perfil', e?.message || 'Não foi possível salvar seus dados.');
-    } finally {
-      setSalvando(false);
-    }
+    } finally { setSalvando(false); }
   }
 
   async function solicitarCondominio() {
     if (!user || !perfil || !codigo.trim()) return Alert.alert('Código', 'Digite o código do condomínio.');
     try {
       setSalvando(true);
-      const resultado = await solicitarVinculoPorCodigo({
-        moradorId: user.uid,
-        moradorNome: perfil.nome,
-        email: perfil.email,
-        bloco: perfil.bloco,
-        apartamento: perfil.apartamento,
-        codigo,
-      });
+      const resultado = await solicitarVinculoPorCodigo({ moradorId:user.uid, moradorNome:perfil.nome, email:perfil.email, bloco:perfil.bloco, apartamento:perfil.apartamento, codigo });
       setCodigo('');
-      Alert.alert('Solicitação enviada', resultado.status === 'aprovada'
-        ? 'Sua entrada já foi aprovada. Toque em “Concluir vínculo”.'
-        : 'A portaria recebeu sua solicitação de entrada.');
-    } catch (e:any) {
-      Alert.alert('Vínculo', e?.message || 'Não foi possível solicitar o vínculo.');
-    } finally { setSalvando(false); }
+      Alert.alert('Solicitação enviada', resultado.status === 'aprovada' ? 'Sua entrada já foi aprovada. Toque em “Concluir vínculo”.' : 'A portaria recebeu sua solicitação de entrada.');
+    } catch (e:any) { Alert.alert('Vínculo', e?.message || 'Não foi possível solicitar o vínculo.'); }
+    finally { setSalvando(false); }
   }
 
   async function concluirVinculo() {
     if (!user || !solicitacao || solicitacao.status !== 'aprovada') return;
     try {
       setSalvando(true);
-      const dados = await concluirVinculoAprovado({ moradorId: user.uid, solicitacaoId: solicitacao.id });
+      const dados = await concluirVinculoAprovado({ moradorId:user.uid, solicitacaoId:solicitacao.id });
       await recarregarPerfil();
       Alert.alert('Vínculo concluído', `Sua conta agora pertence ao condomínio ${dados.condominioNome}.`);
-    } catch (e:any) {
-      Alert.alert('Vínculo', e?.message || 'Não foi possível concluir o vínculo.');
-    } finally { setSalvando(false); }
+    } catch (e:any) { Alert.alert('Vínculo', e?.message || 'Não foi possível concluir o vínculo.'); }
+    finally { setSalvando(false); }
   }
 
   async function copiarCodigo() {
@@ -132,19 +118,14 @@ export default function Perfil({ navigation }: any) {
     if (!user) return;
     try {
       setSalvandoFoto(true);
-      const tratada = await ImageManipulator.manipulateAsync(uri, [{ resize: { width: 256, height: 256 } }], {
-        compress: 0.55,
-        format: ImageManipulator.SaveFormat.JPEG,
-        base64: true,
-      });
+      const tratada = await ImageManipulator.manipulateAsync(uri, [{ resize: { width: 256, height: 256 } }], { compress:0.55, format:ImageManipulator.SaveFormat.JPEG, base64:true });
       if (!tratada.base64) throw new Error('Não foi possível preparar a foto.');
       if (tratada.base64.length > 400000) throw new Error('A foto ficou muito grande. Escolha outra imagem.');
       const novaFoto = `data:image/jpeg;base64,${tratada.base64}`;
-      await setDoc(doc(db, 'fotosPerfil', user.uid), { fotoPerfil: novaFoto, atualizadoEm: serverTimestamp() });
+      await setDoc(doc(db, 'fotosPerfil', user.uid), { fotoPerfil:novaFoto, atualizadoEm:serverTimestamp() });
       setFotoPerfil(novaFoto);
-    } catch (e:any) {
-      Alert.alert('Foto de perfil', e?.message || 'Não foi possível salvar a foto.');
-    } finally { setSalvandoFoto(false); }
+    } catch (e:any) { Alert.alert('Foto de perfil', e?.message || 'Não foi possível salvar a foto.'); }
+    finally { setSalvandoFoto(false); }
   }
 
   async function escolherFoto() {
@@ -163,85 +144,59 @@ export default function Perfil({ navigation }: any) {
 
   async function removerFoto() {
     if (!user) return;
-    try {
-      setSalvandoFoto(true);
-      await deleteDoc(doc(db, 'fotosPerfil', user.uid));
-      setFotoPerfil('');
-    } finally { setSalvandoFoto(false); }
+    try { setSalvandoFoto(true); await deleteDoc(doc(db, 'fotosPerfil', user.uid)); setFotoPerfil(''); }
+    finally { setSalvandoFoto(false); }
   }
 
-  if (!perfil || !user) {
-    return <KeyboardScreen contentContainerStyle={styles.container}><Text style={styles.title}>Carregando perfil...</Text></KeyboardScreen>;
+  async function sair() {
+    await desregistrarDispositivoPush();
+    await signOut(auth);
   }
+
+  if (!perfil || !user) return <KeyboardScreen contentContainerStyle={styles.container}><Text style={styles.title}>Carregando perfil...</Text></KeyboardScreen>;
 
   const isMorador = perfil.tipo === 'morador';
   const inicial = (perfil.nome || 'U').trim().charAt(0).toUpperCase();
 
-  return (
-    <KeyboardScreen contentContainerStyle={styles.container}>
-      <Text style={[styles.eyebrow,{color:isMorador?colors.accent:colors.porter}]}>PERFIL</Text>
-      <Text style={styles.title}>Sua conta</Text>
+  return <KeyboardScreen contentContainerStyle={styles.container}>
+    <Text style={[styles.eyebrow,{color:isMorador?colors.accent:colors.porter}]}>PERFIL</Text>
+    <Text style={styles.title}>Sua conta</Text>
+    <View style={styles.identity}>
+      <View>{fotoPerfil ? <Image source={{uri:fotoPerfil}} style={styles.photo}/> : <View style={styles.photoFallback}><Text style={styles.initial}>{inicial}</Text></View>}<TouchableOpacity style={styles.cameraBadge} onPress={tirarFoto} disabled={salvandoFoto}><Ionicons name="camera-outline" size={16} color="#fff"/></TouchableOpacity></View>
+      <View style={{flex:1}}><Text style={styles.name}>{perfil.nome}</Text><Text style={styles.email}>{perfil.email}</Text><Text style={styles.role}>{isMorador?'Morador':'Portaria'}</Text></View>
+    </View>
+    <View style={styles.photoActions}><TouchableOpacity style={styles.smallButton} onPress={escolherFoto} disabled={salvandoFoto}><Text style={styles.smallButtonText}>{salvandoFoto?'Salvando...':'Escolher foto'}</Text></TouchableOpacity>{!!fotoPerfil && <TouchableOpacity onPress={removerFoto} disabled={salvandoFoto}><Text style={styles.remove}>Remover</Text></TouchableOpacity>}</View>
 
-      <View style={styles.identity}>
-        <View>
-          {fotoPerfil ? <Image source={{uri:fotoPerfil}} style={styles.photo}/> : <View style={styles.photoFallback}><Text style={styles.initial}>{inicial}</Text></View>}
-          <TouchableOpacity style={styles.cameraBadge} onPress={tirarFoto} disabled={salvandoFoto}><Ionicons name="camera-outline" size={16} color="#fff"/></TouchableOpacity>
-        </View>
-        <View style={{flex:1}}><Text style={styles.name}>{perfil.nome}</Text><Text style={styles.email}>{perfil.email}</Text><Text style={styles.role}>{isMorador?'Morador':'Portaria'}</Text></View>
-      </View>
-      <View style={styles.photoActions}>
-        <TouchableOpacity style={styles.smallButton} onPress={escolherFoto} disabled={salvandoFoto}><Text style={styles.smallButtonText}>{salvandoFoto?'Salvando...':'Escolher foto'}</Text></TouchableOpacity>
-        {!!fotoPerfil && <TouchableOpacity onPress={removerFoto} disabled={salvandoFoto}><Text style={styles.remove}>Remover</Text></TouchableOpacity>}
-      </View>
+    <View style={styles.card}>
+      <Text style={styles.cardLabel}>DADOS PESSOAIS</Text>
+      <TextInput style={styles.input} placeholder="Nome completo" value={nome} onChangeText={setNome}/>
+      <TextInput style={styles.input} placeholder="CPF · 000.000.000-00" keyboardType="numeric" value={cpf} onChangeText={valor=>setCpf(formatarCPF(valor))} maxLength={14}/>
+      <Text style={styles.fieldHint}>O CPF precisa ser válido e conter 11 dígitos.</Text>
+      <TextInput style={styles.input} placeholder="Telefone · (00) 00000-0000" keyboardType="phone-pad" value={telefone} onChangeText={valor=>setTelefone(formatarTelefoneBR(valor))} maxLength={15}/>
+      <Text style={styles.fieldHint}>Use DDD + número de telefone brasileiro.</Text>
+      <View style={styles.readonly}><Text style={styles.readonlyLabel}>E-mail de acesso</Text><Text style={styles.readonlyValue}>{perfil.email}</Text></View>
+      {isMorador && <View style={styles.twoCols}><TextInput style={[styles.input,styles.half]} placeholder="Bloco" autoCapitalize="characters" value={bloco} onChangeText={setBloco}/><TextInput style={[styles.input,styles.half]} placeholder="Apartamento" value={apartamento} onChangeText={setApartamento}/></View>}
+      <TouchableOpacity style={[styles.primary,salvando&&{opacity:.55}]} onPress={salvarDados} disabled={salvando}><Ionicons name="save-outline" size={18} color="#fff"/><Text style={styles.primaryText}>{salvando?'Salvando...':'Salvar alterações'}</Text></TouchableOpacity>
+    </View>
 
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>DADOS PESSOAIS</Text>
-        <TextInput style={styles.input} placeholder="Nome completo" value={nome} onChangeText={setNome}/>
-        <TextInput style={styles.input} placeholder="CPF · 000.000.000-00" keyboardType="numeric" value={cpf} onChangeText={valor=>setCpf(formatarCPF(valor))} maxLength={14}/>
-        <Text style={styles.fieldHint}>O CPF precisa ser válido e conter 11 dígitos.</Text>
-        <TextInput style={styles.input} placeholder="Telefone · (00) 00000-0000" keyboardType="phone-pad" value={telefone} onChangeText={valor=>setTelefone(formatarTelefoneBR(valor))} maxLength={15}/>
-        <Text style={styles.fieldHint}>Use DDD + número de telefone brasileiro.</Text>
-        <View style={styles.readonly}><Text style={styles.readonlyLabel}>E-mail de acesso</Text><Text style={styles.readonlyValue}>{perfil.email}</Text></View>
-        {isMorador && <View style={styles.twoCols}>
-          <TextInput style={[styles.input,styles.half]} placeholder="Bloco" autoCapitalize="characters" value={bloco} onChangeText={setBloco}/>
-          <TextInput style={[styles.input,styles.half]} placeholder="Apartamento" value={apartamento} onChangeText={setApartamento}/>
-        </View>}
-        <TouchableOpacity style={[styles.primary,salvando&&{opacity:.55}]} onPress={salvarDados} disabled={salvando}><Ionicons name="save-outline" size={18} color="#fff"/><Text style={styles.primaryText}>{salvando?'Salvando...':'Salvar alterações'}</Text></TouchableOpacity>
-      </View>
+    <View style={styles.card}>
+      <Text style={styles.cardLabel}>CONDOMÍNIO</Text><Text style={styles.condoName}>{perfil.condominioNome || 'Ainda sem condomínio vinculado'}</Text>
+      {!!perfil.condominioCodigo && <TouchableOpacity style={styles.codeRow} onPress={copiarCodigo}><Text style={styles.code}>{perfil.condominioCodigo}</Text><Ionicons name="copy-outline" size={17} color={colors.muted}/><Text style={styles.copyText}>Copiar</Text></TouchableOpacity>}
+      {!!perfil.condominioId && <TouchableOpacity style={styles.menuRow} onPress={()=>navigation.navigate('Condominio')}><View style={styles.menuLeft}><Ionicons name="location-outline" size={21} color={colors.text}/><Text style={styles.menuText}>Endereço e localização no mapa</Text></View><Ionicons name="chevron-forward" size={18} color={colors.muted}/></TouchableOpacity>}
+    </View>
 
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>CONDOMÍNIO</Text>
-        <Text style={styles.condoName}>{perfil.condominioNome || 'Ainda sem condomínio vinculado'}</Text>
-        {!!perfil.condominioCodigo && <TouchableOpacity style={styles.codeRow} onPress={copiarCodigo}><Text style={styles.code}>{perfil.condominioCodigo}</Text><Ionicons name="copy-outline" size={17} color={colors.muted}/><Text style={styles.copyText}>Copiar</Text></TouchableOpacity>}
-        {!!perfil.condominioId && <TouchableOpacity style={styles.menuRow} onPress={()=>navigation.navigate('Condominio')}><View style={styles.menuLeft}><Ionicons name="location-outline" size={21} color={colors.text}/><Text style={styles.menuText}>Endereço e localização no mapa</Text></View><Ionicons name="chevron-forward" size={18} color={colors.muted}/></TouchableOpacity>}
-      </View>
+    {isMorador && !perfil.condominioId && <View style={styles.card}>
+      <Text style={styles.cardLabel}>VINCULAR CONDOMÍNIO</Text>
+      {!solicitacao || solicitacao.status === 'rejeitada' ? <><TextInput style={styles.input} placeholder="Código, ex.: ABC-2DEF" autoCapitalize="characters" autoCorrect={false} value={codigo} onChangeText={setCodigo}/><TouchableOpacity style={styles.primary} onPress={solicitarCondominio} disabled={salvando}><Text style={styles.primaryText}>Enviar solicitação</Text></TouchableOpacity></> : null}
+      {solicitacao?.status === 'pendente' && <View style={styles.statusBox}><Ionicons name="time-outline" size={20} color={colors.warning}/><Text style={styles.statusText}>Aguardando aprovação da portaria para {solicitacao.condominioNome}.</Text></View>}
+      {solicitacao?.status === 'aprovada' && <><View style={styles.statusBox}><Ionicons name="checkmark-circle-outline" size={20} color={colors.success}/><Text style={styles.statusText}>Sua entrada foi aprovada.</Text></View><TouchableOpacity style={styles.primary} onPress={concluirVinculo}><Text style={styles.primaryText}>Concluir vínculo</Text></TouchableOpacity></>}
+    </View>}
 
-      {isMorador && !perfil.condominioId && <View style={styles.card}>
-        <Text style={styles.cardLabel}>VINCULAR CONDOMÍNIO</Text>
-        {!solicitacao || solicitacao.status === 'rejeitada' ? <>
-          <TextInput style={styles.input} placeholder="Código, ex.: ABC-2DEF" autoCapitalize="characters" autoCorrect={false} value={codigo} onChangeText={setCodigo}/>
-          <TouchableOpacity style={styles.primary} onPress={solicitarCondominio} disabled={salvando}><Text style={styles.primaryText}>Enviar solicitação</Text></TouchableOpacity>
-        </> : null}
-        {solicitacao?.status === 'pendente' && <View style={styles.statusBox}><Ionicons name="time-outline" size={20} color={colors.warning}/><Text style={styles.statusText}>Aguardando aprovação da portaria para {solicitacao.condominioNome}.</Text></View>}
-        {solicitacao?.status === 'aprovada' && <><View style={styles.statusBox}><Ionicons name="checkmark-circle-outline" size={20} color={colors.success}/><Text style={styles.statusText}>Sua entrada foi aprovada.</Text></View><TouchableOpacity style={styles.primary} onPress={concluirVinculo}><Text style={styles.primaryText}>Concluir vínculo</Text></TouchableOpacity></>}
-      </View>}
+    <View style={styles.card}><Text style={styles.cardLabel}>APARÊNCIA</Text><Text style={styles.themeHelp}>Escolha como o Cegonha deve aparecer neste dispositivo.</Text><View style={styles.themeRow}>{([['light','Claro','sunny-outline'],['dark','Escuro','moon-outline'],['system','Sistema','phone-portrait-outline']] as const).map(([valor,label,icone]) => <TouchableOpacity key={valor} style={[styles.themeButton,mode===valor&&styles.themeButtonActive]} onPress={()=>setMode(valor)}><Ionicons name={icone} size={18} color={mode===valor?'#fff':colors.text}/><Text style={[styles.themeText,mode===valor&&{color:'#fff'}]}>{label}</Text></TouchableOpacity>)}</View></View>
 
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>APARÊNCIA</Text>
-        <Text style={styles.themeHelp}>Escolha como o Cegonha deve aparecer neste dispositivo.</Text>
-        <View style={styles.themeRow}>
-          {([['light','Claro','sunny-outline'],['dark','Escuro','moon-outline'],['system','Sistema','phone-portrait-outline']] as const).map(([valor,label,icone]) => (
-            <TouchableOpacity key={valor} style={[styles.themeButton,mode===valor&&styles.themeButtonActive]} onPress={()=>setMode(valor)}>
-              <Ionicons name={icone} size={18} color={mode===valor?'#fff':colors.text}/><Text style={[styles.themeText,mode===valor&&{color:'#fff'}]}>{label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      <TouchableOpacity style={styles.menuRowStandalone} onPress={()=>navigation.navigate('Privacidade')}><View style={styles.menuLeft}><Ionicons name="shield-checkmark-outline" size={21} color={colors.text}/><Text style={styles.menuText}>Privacidade e segurança</Text></View><Ionicons name="chevron-forward" size={18} color={colors.muted}/></TouchableOpacity>
-      <TouchableOpacity style={styles.logout} onPress={()=>signOut(auth)}><Ionicons name="log-out-outline" size={19} color={colors.danger}/><Text style={styles.logoutText}>Sair da conta</Text></TouchableOpacity>
-    </KeyboardScreen>
-  );
+    <TouchableOpacity style={styles.menuRowStandalone} onPress={()=>navigation.navigate('Privacidade')}><View style={styles.menuLeft}><Ionicons name="shield-checkmark-outline" size={21} color={colors.text}/><Text style={styles.menuText}>Privacidade e segurança</Text></View><Ionicons name="chevron-forward" size={18} color={colors.muted}/></TouchableOpacity>
+    <TouchableOpacity style={styles.logout} onPress={sair}><Ionicons name="log-out-outline" size={19} color={colors.danger}/><Text style={styles.logoutText}>Sair da conta</Text></TouchableOpacity>
+  </KeyboardScreen>;
 }
 
 function makeStyles(colors: ThemeColors) {
