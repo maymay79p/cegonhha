@@ -1,15 +1,18 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { doc, updateDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { AppText as Text } from '../components/AppText';
-import { colors, radius, shadow } from '../theme';
+import { radius, shadow, ThemeColors } from '../theme';
 
 export default function CodigoCondominio() {
   const { perfil } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   async function copiar() {
     if (!perfil?.condominioCodigo) return;
@@ -32,11 +35,11 @@ export default function CodigoCondominio() {
       <Text style={styles.code}>{perfil?.condominioCodigo || '—'}</Text>
       <TouchableOpacity style={styles.copy} onPress={copiar}><Ionicons name="copy-outline" size={20} color="#fff"/><Text style={styles.copyText}>Copiar código</Text></TouchableOpacity>
     </View>
-    <Text style={styles.hint}>Você também poderá encontrar este código depois na tela do condomínio e no seu perfil.</Text>
-    <TouchableOpacity style={styles.continue} onPress={continuar}><Text style={styles.continueText}>Continuar para o painel</Text><Ionicons name="arrow-forward" size={18} color={colors.porter}/></TouchableOpacity>
+    <Text style={styles.hint}>Esta tela fica em destaque antes do painel. O código também continuará disponível em Condomínio e Perfil.</Text>
+    <TouchableOpacity style={styles.continue} onPress={continuar}><Text style={styles.continueText}>Já guardei o código</Text><Ionicons name="arrow-forward" size={18} color={colors.porter}/></TouchableOpacity>
   </View>;
 }
 
-const styles=StyleSheet.create({
+function makeStyles(colors:ThemeColors){return StyleSheet.create({
   container:{flex:1,backgroundColor:colors.background,padding:24,justifyContent:'center'},icon:{width:72,height:72,borderRadius:36,backgroundColor:colors.porterSoft,alignItems:'center',justifyContent:'center',alignSelf:'center',marginBottom:18},eyebrow:{textAlign:'center',fontSize:12,fontWeight:'700',letterSpacing:2,color:colors.porter},title:{fontSize:36,fontWeight:'700',textAlign:'center',marginTop:6},subtitle:{fontSize:17,lineHeight:23,color:colors.muted,textAlign:'center',marginTop:8},codeCard:{backgroundColor:colors.surface,borderRadius:radius.large,padding:22,borderWidth:1,borderColor:colors.border,marginTop:24,...shadow},condo:{fontSize:17,color:colors.muted,textAlign:'center'},code:{fontSize:42,fontWeight:'700',letterSpacing:4,textAlign:'center',color:colors.porter,marginVertical:18},copy:{height:52,borderRadius:radius.pill,backgroundColor:colors.porter,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8},copyText:{color:'#fff',fontSize:17,fontWeight:'700'},hint:{fontSize:14,lineHeight:20,color:colors.muted,textAlign:'center',marginTop:14},continue:{height:52,borderRadius:radius.pill,backgroundColor:colors.porterSoft,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8,marginTop:14},continueText:{fontSize:17,fontWeight:'700',color:colors.porter}
-});
+});}
