@@ -32,6 +32,8 @@ npm run typecheck
 npm run doctor
 ```
 
+A branch de revisão possui um workflow do GitHub Actions que executa o `typecheck` no pull request.
+
 ## Firebase
 
 Depois de alterar `firestore.rules`, publique as regras no projeto Firebase antes de testar os novos recursos:
