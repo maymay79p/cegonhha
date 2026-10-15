@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
+import { registrarDispositivoPush } from '../services/pushNotifications';
 
 export type PerfilUsuario = {
   id: string;
@@ -138,6 +139,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (timerPerfilAusente) clearTimeout(timerPerfilAusente);
     };
   }, []);
+
+  useEffect(() => {
+    if (!user || !perfil || user.uid !== perfil.id) return;
+    registrarDispositivoPush({
+      uid: user.uid,
+      tipo: perfil.tipo,
+      condominioId: perfil.condominioId || '',
+    }).catch(() => {});
+  }, [user?.uid, perfil?.id, perfil?.tipo, perfil?.condominioId]);
 
   return <AuthContext.Provider value={{ user, perfil, loading, recarregarPerfil, aplicarPerfilLocal }}>{children}</AuthContext.Provider>;
 }
