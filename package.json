@@ -9,6 +9,7 @@
     "start": "expo start --clear --port 19002",
     "web": "expo start --web --port 19002",
     "doctor": "npx expo-doctor@latest",
+    "typecheck": "tsc --noEmit",
     "firebase:auth": "npx firebase-tools@latest deploy --only auth --project cegonha-43403",
     "firebase:rules": "npx firebase-tools@latest deploy --only firestore:rules --project cegonha-43403",
     "firebase:deploy": "npx firebase-tools@latest deploy --only firestore:rules --project cegonha-43403"
