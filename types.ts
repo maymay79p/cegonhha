@@ -73,6 +73,7 @@ export type ResultadoOCR = {
   candidatos: CandidatoOCR[];
   tempoMs?: number;
   leituraId?: string;
+  motor?: 'google-ml-kit';
 };
 
 export type OCRMeta = {
