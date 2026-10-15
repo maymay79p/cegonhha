@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -43,17 +43,40 @@ export default function Previsoes() {
 
   async function salvar() {
     if (!user || !perfil) return;
+    if (!perfil.condominioId) return Alert.alert('Condomínio necessário', 'Vincule sua conta a um condomínio antes de cadastrar uma entrega prevista. Assim a portaria também poderá acompanhar o que está a caminho.');
     if (!descricao.trim()) return Alert.alert('Atenção', 'Informe uma descrição da encomenda.');
     try {
       setLoading(true);
       const estavaEditando = !!editandoId;
       const dados = { descricao: descricao.trim(), codigoRastreio: rastreio.trim(), transportadora: transportadora.trim(), previsao: previsao.trim(), atrasada, atualizadoEm: serverTimestamp() };
-      if (editandoId) await updateDoc(doc(db, 'previsoes', editandoId), dados);
-      else await addDoc(collection(db, 'previsoes'), { moradorId: user.uid, condominioId: perfil.condominioId || '', ...dados, criadaEm: serverTimestamp() });
+      if (editandoId) {
+        await updateDoc(doc(db, 'previsoes', editandoId), dados);
+      } else {
+        const previsaoRef = doc(collection(db, 'previsoes'));
+        const notificacaoRef = doc(collection(db, 'notificacoes'));
+        const batch = writeBatch(db);
+        batch.set(previsaoRef, { moradorId: user.uid, condominioId: perfil.condominioId, ...dados, criadaEm: serverTimestamp() });
+        batch.set(notificacaoRef, {
+          destinatarioTipo: 'porteiro',
+          condominioId: perfil.condominioId,
+          remetenteId: user.uid,
+          remetenteNome: perfil.nome || user.displayName || 'Morador',
+          referenciaId: previsaoRef.id,
+          tipo: 'previsao',
+          mensagem: `${perfil.nome || 'Um morador'} informou uma entrega prevista: ${descricao.trim()}${perfil.bloco || perfil.apartamento ? ` · Bloco ${perfil.bloco || '-'} · Ap. ${perfil.apartamento || '-'}` : ''}.`,
+          lidaPor: [],
+          criadaEm: serverTimestamp(),
+        });
+        await batch.commit();
+      }
       limparFormulario();
-      Alert.alert('Pronto', estavaEditando ? 'Entrega prevista atualizada.' : 'Entrega prevista registrada.');
+      Alert.alert('Pronto', estavaEditando ? 'Entrega prevista atualizada.' : 'Entrega prevista registrada e comunicada à portaria.');
     } catch (e: any) {
-      Alert.alert('Erro', e?.message || 'Não foi possível salvar.');
+      const codigo = String(e?.code || '');
+      const mensagem = codigo.includes('permission-denied')
+        ? 'O Firestore bloqueou a operação. Publique as regras mais recentes do Cegonha e tente novamente.'
+        : e?.message || 'Não foi possível salvar.';
+      Alert.alert('Erro', mensagem);
     } finally { setLoading(false); }
   }
 
@@ -65,7 +88,8 @@ export default function Previsoes() {
   }
 
   return <KeyboardScreen contentContainerStyle={styles.container}>
-    <Text style={styles.eyebrow}>ESPERADAS</Text><Text style={styles.title}>O que está a caminho</Text><Text style={styles.help}>Cadastre, edite ou remova entregas que você espera receber. A lista atualiza automaticamente.</Text>
+    <Text style={styles.eyebrow}>ESPERADAS</Text><Text style={styles.title}>O que está a caminho</Text><Text style={styles.help}>Cadastre, edite ou remova entregas que você espera receber. Novas previsões também são comunicadas à portaria do seu condomínio.</Text>
+    {!perfil?.condominioId && <View style={styles.warningBox}><Ionicons name="information-circle-outline" size={20} color={colors.warning}/><Text style={styles.warningText}>Vincule seu condomínio no Perfil para cadastrar entregas previstas e compartilhá-las com a portaria.</Text></View>}
     <View style={styles.formCard}>
       {editandoId && <View style={styles.editBanner}><Ionicons name="create-outline" size={18} color={colors.accent}/><Text style={styles.editText}>Editando uma entrega prevista</Text></View>}
       <TextInput style={styles.input} placeholder="Descrição da encomenda" value={descricao} onChangeText={setDescricao} returnKeyType="next" />
@@ -73,7 +97,7 @@ export default function Previsoes() {
       <TextInput style={styles.input} placeholder="Transportadora" value={transportadora} onChangeText={setTransportadora} returnKeyType="next" />
       <TextInput style={styles.input} placeholder="Previsão de chegada" value={previsao} onChangeText={setPrevisao} returnKeyType="done" onSubmitEditing={salvar} />
       <TouchableOpacity style={styles.checkRow} onPress={()=>setAtrasada(v=>!v)}><Ionicons name={atrasada?'checkbox':'square-outline'} size={22} color={atrasada?colors.accent:colors.muted}/><Text style={styles.checkText}>Marcar como atrasada</Text></TouchableOpacity>
-      <TouchableOpacity style={[styles.button,loading&&styles.disabled]} onPress={salvar} disabled={loading}><Text style={styles.buttonText}>{loading?'Salvando...':editandoId?'Salvar alterações':'Adicionar entrega'}</Text><Ionicons name={editandoId?'checkmark':'arrow-forward'} size={18} color="#fff"/></TouchableOpacity>
+      <TouchableOpacity style={[styles.button,(loading||!perfil?.condominioId)&&styles.disabled]} onPress={salvar} disabled={loading||!perfil?.condominioId}><Text style={styles.buttonText}>{loading?'Salvando...':editandoId?'Salvar alterações':'Adicionar entrega'}</Text><Ionicons name={editandoId?'checkmark':'arrow-forward'} size={18} color="#fff"/></TouchableOpacity>
       {editandoId&&<TouchableOpacity style={styles.cancelEdit} onPress={limparFormulario}><Text style={styles.cancelEditText}>Cancelar edição</Text></TouchableOpacity>}
     </View>
 
@@ -87,5 +111,5 @@ export default function Previsoes() {
 }
 
 function makeStyles(colors:ThemeColors){return StyleSheet.create({
-  container:{paddingHorizontal:20,paddingTop:54,paddingBottom:140,backgroundColor:colors.background},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:2,color:colors.accent},title:{fontSize:34,fontWeight:'700',color:colors.text,marginTop:4},help:{fontSize:16,color:colors.muted,marginTop:4,marginBottom:16,lineHeight:21},formCard:{backgroundColor:colors.surface,borderRadius:radius.large,padding:16,borderWidth:1,borderColor:colors.border,...shadow},editBanner:{flexDirection:'row',alignItems:'center',gap:7,backgroundColor:colors.accentSoft,padding:10,borderRadius:radius.small,marginBottom:10},editText:{fontWeight:'700',color:colors.accent},input:{backgroundColor:colors.surfaceSoft,borderWidth:0,borderRadius:radius.medium,paddingHorizontal:15,paddingVertical:13,marginBottom:10},checkRow:{flexDirection:'row',alignItems:'center',gap:9,paddingVertical:5,marginBottom:10},checkText:{fontSize:16,fontWeight:'600'},button:{backgroundColor:colors.accent,padding:14,borderRadius:radius.pill,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:8},buttonText:{color:'#fff',fontSize:17,fontWeight:'700'},cancelEdit:{alignItems:'center',paddingTop:12},cancelEditText:{fontWeight:'700',color:colors.muted},sectionRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:22,marginBottom:10},section:{fontSize:24,fontWeight:'700'},count:{fontSize:14,color:colors.muted},card:{backgroundColor:colors.surface,padding:14,borderRadius:radius.large,marginBottom:9,borderWidth:1,borderColor:colors.border,flexDirection:'row',gap:11},cardIcon:{width:38,height:38,borderRadius:19,backgroundColor:colors.accentSoft,alignItems:'center',justifyContent:'center'},cardCopy:{flex:1},name:{fontWeight:'700',fontSize:18},meta:{fontSize:14,color:colors.muted,marginTop:1},late:{color:colors.danger,fontWeight:'700',marginTop:4},cardActions:{justifyContent:'center',gap:8},iconButton:{width:36,height:36,borderRadius:18,backgroundColor:colors.surfaceSoft,alignItems:'center',justifyContent:'center'},disabled:{opacity:0.55}
+  container:{paddingHorizontal:20,paddingTop:54,paddingBottom:140,backgroundColor:colors.background},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:2,color:colors.accent},title:{fontSize:34,fontWeight:'700',color:colors.text,marginTop:4},help:{fontSize:16,color:colors.muted,marginTop:4,marginBottom:16,lineHeight:21},warningBox:{flexDirection:'row',alignItems:'center',gap:8,backgroundColor:colors.surfaceSoft,borderRadius:radius.medium,padding:12,borderWidth:1,borderColor:colors.border,marginBottom:12},warningText:{flex:1,fontSize:14,lineHeight:19,color:colors.muted},formCard:{backgroundColor:colors.surface,borderRadius:radius.large,padding:16,borderWidth:1,borderColor:colors.border,...shadow},editBanner:{flexDirection:'row',alignItems:'center',gap:7,backgroundColor:colors.accentSoft,padding:10,borderRadius:radius.small,marginBottom:10},editText:{fontWeight:'700',color:colors.accent},input:{backgroundColor:colors.surfaceSoft,borderWidth:0,borderRadius:radius.medium,paddingHorizontal:15,paddingVertical:13,marginBottom:10},checkRow:{flexDirection:'row',alignItems:'center',gap:9,paddingVertical:5,marginBottom:10},checkText:{fontSize:16,fontWeight:'600'},button:{backgroundColor:colors.accent,padding:14,borderRadius:radius.pill,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:8},buttonText:{color:'#fff',fontSize:17,fontWeight:'700'},cancelEdit:{alignItems:'center',paddingTop:12},cancelEditText:{fontWeight:'700',color:colors.muted},sectionRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:22,marginBottom:10},section:{fontSize:24,fontWeight:'700'},count:{fontSize:14,color:colors.muted},card:{backgroundColor:colors.surface,padding:14,borderRadius:radius.large,marginBottom:9,borderWidth:1,borderColor:colors.border,flexDirection:'row',gap:11},cardIcon:{width:38,height:38,borderRadius:19,backgroundColor:colors.accentSoft,alignItems:'center',justifyContent:'center'},cardCopy:{flex:1},name:{fontWeight:'700',fontSize:18},meta:{fontSize:14,color:colors.muted,marginTop:1},late:{color:colors.danger,fontWeight:'700',marginTop:4},cardActions:{justifyContent:'center',gap:8},iconButton:{width:36,height:36,borderRadius:18,backgroundColor:colors.surfaceSoft,alignItems:'center',justifyContent:'center'},disabled:{opacity:0.55}
 });}
