@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { addDoc, collection, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -77,6 +77,14 @@ export default function Mural() {
     Alert.alert('Usuário banido', 'Esse usuário não poderá publicar novos comentários no mural.');
   }
 
+  function excluir(item: any) {
+    if (perfil?.tipo !== 'porteiro') return;
+    Alert.alert('Excluir comentário', 'Deseja remover este comentário do mural?', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Excluir', style: 'destructive', onPress: () => deleteDoc(doc(db, 'mural', item.id)).catch(() => Alert.alert('Mural', 'Não foi possível excluir o comentário.')) },
+    ]);
+  }
+
   if (!perfil?.condominioId) return <View style={styles.container}><EmptyState icon="people-outline" title="Sem condomínio" text="Vincule sua conta a um condomínio para acessar o mural." /></View>;
 
   return <View style={styles.container}>
@@ -94,11 +102,12 @@ export default function Mural() {
       <View style={styles.actions}>
         {item.autorId !== perfil.id && <TouchableOpacity onPress={()=>denunciar(item)} style={styles.action}><Ionicons name="flag-outline" size={15} color={colors.warning}/><Text style={styles.actionText}>Denunciar</Text></TouchableOpacity>}
         {perfil.tipo === 'porteiro' && item.autorId !== perfil.id && <TouchableOpacity onPress={()=>banir(item)} style={styles.action}><Ionicons name="ban-outline" size={15} color={colors.danger}/><Text style={[styles.actionText,{color:colors.danger}]}>Banir autor</Text></TouchableOpacity>}
+        {perfil.tipo === 'porteiro' && <TouchableOpacity onPress={()=>excluir(item)} style={styles.action}><Ionicons name="trash-outline" size={15} color={colors.danger}/><Text style={[styles.actionText,{color:colors.danger}]}>Excluir</Text></TouchableOpacity>}
       </View>
     </View>}/>
   </View>;
 }
 
 const styles=StyleSheet.create({
-  container:{flex:1,padding:20,paddingBottom:110,backgroundColor:colors.background},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.8,color:colors.accent},title:{fontSize:34,fontWeight:'700',marginTop:3},subtitle:{fontSize:15,color:colors.muted,marginBottom:12},search:{height:48,borderRadius:radius.pill,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,flexDirection:'row',alignItems:'center',paddingHorizontal:14},searchInput:{flex:1,paddingHorizontal:8},compose:{flexDirection:'row',gap:8,alignItems:'flex-end',marginVertical:12},input:{flex:1,minHeight:50,maxHeight:110,backgroundColor:colors.surface,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,padding:12},send:{width:48,height:48,borderRadius:24,backgroundColor:colors.accent,alignItems:'center',justifyContent:'center'},card:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,padding:15,marginBottom:9},top:{flexDirection:'row',justifyContent:'space-between'},name:{fontSize:17,fontWeight:'700'},role:{fontSize:12,color:colors.muted,marginTop:1},body:{fontSize:16,lineHeight:22,marginTop:10},actions:{flexDirection:'row',gap:12,marginTop:12},action:{flexDirection:'row',alignItems:'center',gap:5},actionText:{fontSize:13,fontWeight:'700',color:colors.warning}
+  container:{flex:1,padding:20,paddingBottom:110,backgroundColor:colors.background},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.8,color:colors.accent},title:{fontSize:34,fontWeight:'700',marginTop:3},subtitle:{fontSize:15,color:colors.muted,marginBottom:12},search:{height:48,borderRadius:radius.pill,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,flexDirection:'row',alignItems:'center',paddingHorizontal:14},searchInput:{flex:1,paddingHorizontal:8},compose:{flexDirection:'row',gap:8,alignItems:'flex-end',marginVertical:12},input:{flex:1,minHeight:50,maxHeight:110,backgroundColor:colors.surface,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,padding:12},send:{width:48,height:48,borderRadius:24,backgroundColor:colors.accent,alignItems:'center',justifyContent:'center'},card:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,padding:15,marginBottom:9},top:{flexDirection:'row',justifyContent:'space-between'},name:{fontSize:17,fontWeight:'700'},role:{fontSize:12,color:colors.muted,marginTop:1},body:{fontSize:16,lineHeight:22,marginTop:10},actions:{flexDirection:'row',gap:12,marginTop:12,flexWrap:'wrap'},action:{flexDirection:'row',alignItems:'center',gap:5},actionText:{fontSize:13,fontWeight:'700',color:colors.warning}
 });
