@@ -32,7 +32,7 @@ npm run typecheck
 npm run doctor
 ```
 
-O pull request possui um workflow do GitHub Actions que executa `npm run typecheck`.
+O pull request executa `npm run typecheck` no GitHub Actions.
 
 ## Firebase
 
