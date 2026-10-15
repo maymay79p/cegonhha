@@ -13,6 +13,18 @@ service cloud.firestore {
         && perfil().get('condominioId', '') == id;
     }
 
+    function moradorExiste(uid) {
+      return uid is string
+        && uid.size() > 0
+        && exists(/databases/$(database)/documents/usuarios/$(uid))
+        && get(/databases/$(database)/documents/usuarios/$(uid)).data.tipo == 'morador';
+    }
+
+    function moradorNoCondominio(uid, condominioId) {
+      return moradorExiste(uid)
+        && get(/databases/$(database)/documents/usuarios/$(uid)).data.get('condominioId', '') == condominioId;
+    }
+
     function solicitacaoAprovadaPara(novoCondominioId, solicitacaoId) {
       return solicitacaoId is string
         && solicitacaoId.size() > 0
@@ -26,6 +38,48 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/muralBanidos/$(condominioId + '_' + uid))
         && get(/databases/$(database)/documents/muralBanidos/$(condominioId + '_' + uid)).data.get('ativo', false) == true
         && get(/databases/$(database)/documents/muralBanidos/$(condominioId + '_' + uid)).data.get('condominioId', '') == condominioId;
+    }
+
+    function notificacaoVinculoValidaParaMorador() {
+      return request.resource.data.tipo == 'vinculo'
+        && request.resource.data.referenciaId is string
+        && request.resource.data.referenciaId.size() > 0
+        && existsAfter(/databases/$(database)/documents/solicitacoesCondominio/$(request.resource.data.referenciaId))
+        && getAfter(/databases/$(database)/documents/solicitacoesCondominio/$(request.resource.data.referenciaId)).data.moradorId == request.resource.data.moradorId
+        && getAfter(/databases/$(database)/documents/solicitacoesCondominio/$(request.resource.data.referenciaId)).data.condominioId == request.resource.data.condominioId
+        && getAfter(/databases/$(database)/documents/solicitacoesCondominio/$(request.resource.data.referenciaId)).data.status in ['aprovada', 'rejeitada'];
+    }
+
+    function avisoSolicitacaoValidoParaPortaria() {
+      return morador()
+        && request.resource.data.tipo == 'solicitacao_vinculo'
+        && request.resource.data.referenciaId is string
+        && request.resource.data.referenciaId.size() > 0
+        && existsAfter(/databases/$(database)/documents/solicitacoesCondominio/$(request.resource.data.referenciaId))
+        && getAfter(/databases/$(database)/documents/solicitacoesCondominio/$(request.resource.data.referenciaId)).data.moradorId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/solicitacoesCondominio/$(request.resource.data.referenciaId)).data.condominioId == request.resource.data.condominioId
+        && getAfter(/databases/$(database)/documents/solicitacoesCondominio/$(request.resource.data.referenciaId)).data.status == 'pendente';
+    }
+
+    function avisoPrevisaoValidoParaPortaria() {
+      return morador()
+        && request.resource.data.tipo == 'previsao'
+        && mesmoCondominio(request.resource.data.condominioId)
+        && request.resource.data.referenciaId is string
+        && request.resource.data.referenciaId.size() > 0
+        && existsAfter(/databases/$(database)/documents/previsoes/$(request.resource.data.referenciaId))
+        && getAfter(/databases/$(database)/documents/previsoes/$(request.resource.data.referenciaId)).data.moradorId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/previsoes/$(request.resource.data.referenciaId)).data.condominioId == request.resource.data.condominioId;
+    }
+
+    function avisoDenunciaValidoParaPortaria() {
+      return request.resource.data.tipo == 'denuncia'
+        && mesmoCondominio(request.resource.data.condominioId)
+        && request.resource.data.referenciaId is string
+        && request.resource.data.referenciaId.size() > 0
+        && existsAfter(/databases/$(database)/documents/muralDenuncias/$(request.resource.data.referenciaId))
+        && getAfter(/databases/$(database)/documents/muralDenuncias/$(request.resource.data.referenciaId)).data.denuncianteId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/muralDenuncias/$(request.resource.data.referenciaId)).data.condominioId == request.resource.data.condominioId;
     }
 
     match /condominios/{condominioId} {
@@ -169,7 +223,9 @@ service cloud.firestore {
     match /previsoes/{id} {
       allow create: if morador()
         && request.resource.data.moradorId == request.auth.uid
-        && request.resource.data.condominioId == perfil().get('condominioId', '');
+        && request.resource.data.condominioId is string
+        && request.resource.data.condominioId.size() > 0
+        && mesmoCondominio(request.resource.data.condominioId);
 
       allow read: if logado() && (
         resource.data.moradorId == request.auth.uid ||
@@ -186,22 +242,65 @@ service cloud.firestore {
     }
 
     match /notificacoes/{id} {
-      allow create: if porteiro()
-        && mesmoCondominio(request.resource.data.condominioId)
-        && request.resource.data.moradorId is string
+      allow create: if logado()
+        && request.resource.data.condominioId is string
+        && request.resource.data.condominioId.size() > 0
         && request.resource.data.mensagem is string
-        && request.resource.data.mensagem.size() > 0;
+        && request.resource.data.mensagem.size() > 0
+        && request.resource.data.mensagem.size() <= 1000
+        && (
+          (
+            porteiro()
+            && mesmoCondominio(request.resource.data.condominioId)
+            && request.resource.data.get('destinatarioTipo', 'morador') == 'morador'
+            && request.resource.data.moradorId is string
+            && moradorExiste(request.resource.data.moradorId)
+            && (
+              (
+                request.resource.data.tipo in ['chegada', 'retirada', 'lembrete']
+                && moradorNoCondominio(request.resource.data.moradorId, request.resource.data.condominioId)
+              ) ||
+              notificacaoVinculoValidaParaMorador()
+            )
+          ) ||
+          (
+            request.resource.data.destinatarioTipo == 'porteiro'
+            && request.resource.data.remetenteId == request.auth.uid
+            && request.resource.data.lidaPor is list
+            && request.resource.data.lidaPor.size() == 0
+            && (
+              avisoSolicitacaoValidoParaPortaria() ||
+              avisoPrevisaoValidoParaPortaria() ||
+              avisoDenunciaValidoParaPortaria()
+            )
+          )
+        );
 
       allow read: if logado() && (
         resource.data.moradorId == request.auth.uid ||
-        (porteiro() && mesmoCondominio(resource.data.condominioId))
+        (
+          porteiro()
+          && resource.data.get('destinatarioTipo', '') == 'porteiro'
+          && mesmoCondominio(resource.data.condominioId)
+        )
       );
 
-      allow update: if logado()
-        && resource.data.moradorId == request.auth.uid
-        && request.resource.data.moradorId == resource.data.moradorId
-        && request.resource.data.condominioId == resource.data.condominioId
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lida']);
+      allow update: if logado() && (
+        (
+          resource.data.moradorId == request.auth.uid
+          && request.resource.data.moradorId == resource.data.moradorId
+          && request.resource.data.condominioId == resource.data.condominioId
+          && request.resource.data.lida is bool
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lida'])
+        ) ||
+        (
+          porteiro()
+          && resource.data.get('destinatarioTipo', '') == 'porteiro'
+          && mesmoCondominio(resource.data.condominioId)
+          && request.resource.data.lidaPor is list
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lidaPor'])
+        )
+      );
 
       allow delete: if false;
     }
@@ -301,7 +400,8 @@ service cloud.firestore {
         (resource != null && porteiro() && mesmoCondominio(resource.data.condominioId))
       );
 
-      allow list: if porteiro();
+      allow list: if porteiro()
+        && mesmoCondominio(resource.data.condominioId);
 
       allow create, update: if porteiro()
         && mesmoCondominio(request.resource.data.condominioId);
