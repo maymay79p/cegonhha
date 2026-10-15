@@ -1,8 +1,8 @@
 import {
+  collection,
   doc,
   getDoc,
   serverTimestamp,
-  setDoc,
   updateDoc,
   writeBatch,
 } from 'firebase/firestore';
@@ -60,7 +60,13 @@ export async function solicitarVinculoPorCodigo({
     return { id, condominio, status: 'concluida' as const };
   }
 
-  await setDoc(ref, {
+  if (atual.exists() && atual.data()?.status === 'pendente') {
+    return { id, condominio, status: 'pendente' as const };
+  }
+
+  const notificacaoRef = doc(collection(db, 'notificacoes'));
+  const batch = writeBatch(db);
+  batch.set(ref, {
     moradorId,
     moradorNome,
     email,
@@ -73,6 +79,18 @@ export async function solicitarVinculoPorCodigo({
     criadoEm: atual.exists() ? (atual.data()?.criadoEm || serverTimestamp()) : serverTimestamp(),
     atualizadoEm: serverTimestamp(),
   }, { merge: true });
+  batch.set(notificacaoRef, {
+    destinatarioTipo: 'porteiro',
+    condominioId: condominio.id,
+    remetenteId: moradorId,
+    remetenteNome: moradorNome,
+    referenciaId: id,
+    tipo: 'solicitacao_vinculo',
+    mensagem: `${moradorNome} solicitou entrada no condomínio${bloco || apartamento ? ` · Bloco ${bloco || '-'} · Ap. ${apartamento || '-'}` : ''}.`,
+    lidaPor: [],
+    criadaEm: serverTimestamp(),
+  });
+  await batch.commit();
 
   return { id, condominio, status: 'pendente' as const };
 }
