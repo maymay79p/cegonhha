@@ -14,7 +14,8 @@ O perfil de síndico não faz mais parte do sistema.
 - cadastro e atualização de dados pessoais do morador;
 - registro de encomendas pela portaria;
 - histórico geral da portaria e individual do morador;
-- notificações internas automáticas de chegada, retirada e lembrete;
+- central de notificações interna para Morador e Portaria;
+- notificações automáticas de chegada, retirada, lembrete, vínculo, entrega prevista e denúncia;
 - OCR de etiquetas com **Google ML Kit**, executado no próprio aparelho, com tentativa de leitura de nome, CPF, bloco e apartamento;
 - cruzamento dos dados lidos na etiqueta com os moradores do condomínio;
 - histórico das leituras OCR da portaria;
@@ -44,7 +45,36 @@ Depois de alterar `firestore.rules`, publique as regras no projeto Firebase ante
 npm run firebase:rules
 ```
 
-Isso é especialmente importante para o mural, pois as permissões de publicação, denúncia e exclusão são verificadas pelo Firestore.
+Isso é especialmente importante para notificações, vínculo de moradores, mural e denúncias, pois as permissões de cada fluxo são verificadas pelo Firestore.
+
+## Comunicação entre Morador e Portaria
+
+A comunicação operacional é bidirecional e utiliza o Firestore em tempo real.
+
+### Portaria → Morador
+
+O Morador recebe avisos internos quando:
+
+- uma encomenda é registrada em seu nome;
+- uma retirada é confirmada pela Portaria;
+- uma encomenda permanece há mais de 3 dias aguardando retirada;
+- sua solicitação de vínculo com o condomínio é aprovada ou rejeitada.
+
+### Morador → Portaria
+
+A Portaria recebe avisos internos quando:
+
+- um Morador solicita vínculo com o condomínio;
+- um Morador cadastra uma nova entrega prevista;
+- uma publicação do Mural é denunciada.
+
+Cada usuário da Portaria possui seu próprio estado de leitura dos avisos de Portaria. Assim, um porteiro abrir uma notificação não faz com que ela seja marcada como lida para os demais usuários da Portaria.
+
+### Comunicação geral
+
+Moradores e Portaria vinculados ao mesmo condomínio usam o **Mural** como canal comum de comunicação em tempo real. As mensagens exibem autor, perfil, data e horário, têm filtro de linguagem imprópria e podem ser denunciadas. O autor pode excluir a própria publicação e a Portaria pode moderar o conteúdo.
+
+As gravações críticas de encomenda e comunicação foram agrupadas em batches/transações quando necessário. Dessa forma, ações como registrar chegada, retirada, lembrete ou decidir uma solicitação de vínculo evitam ficar em estado parcial, por exemplo com o status alterado mas sem o aviso correspondente.
 
 ## OCR com Google ML Kit
 
@@ -84,10 +114,14 @@ No primeiro login com Google, se ainda não existir um documento do usuário no 
 
 ## Mural do condomínio
 
-Moradores e portaria vinculados ao mesmo condomínio podem publicar mensagens no mural. Cada publicação registra o ID e o nome do autor, o tipo de perfil e a data/hora. O autor pode excluir a própria publicação; outros usuários podem denunciá-la; e a portaria mantém os recursos de moderação e banimento já existentes.
+Moradores e Portaria vinculados ao mesmo condomínio podem publicar mensagens no mural. Cada publicação registra o ID e o nome do autor, o tipo de perfil e a data/hora. O autor pode excluir a própria publicação; outros usuários podem denunciá-la; e a Portaria mantém os recursos de moderação e banimento.
 
 ## Limites atuais
 
-As notificações desta etapa são internas ao aplicativo, armazenadas no Firestore e exibidas em tempo real. Push do sistema operacional com o aplicativo totalmente fechado exigirá tokens de dispositivo e um serviço de envio.
+As notificações desta etapa são internas ao aplicativo, armazenadas no Firestore e exibidas em tempo real enquanto o aplicativo está conectado. **Ainda não são notificações push do sistema operacional com o aplicativo totalmente fechado.** Esse recurso exige tokens de dispositivo e um serviço de envio, como Expo Notifications/FCM com um backend ou função em nuvem.
+
+O Mural é o canal geral de comunicação do condomínio. O Cegonha não possui, nesta versão, chat privado direto entre Morador e Portaria.
+
+O lembrete de encomenda com mais de 3 dias é disparado quando a Portaria utiliza o aplicativo e o painel identifica a pendência. Para transformá-lo em um agendamento independente de qualquer aparelho aberto, será necessário um processo de backend agendado.
 
 A localização do condomínio é cadastrada como endereço e aberta no aplicativo de mapas do dispositivo. Um mapa incorporado no Cegonha exigirá uma biblioteca/SDK de mapas e configuração adicional.
