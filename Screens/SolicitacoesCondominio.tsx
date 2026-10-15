@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { addDoc, collection, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, serverTimestamp, where, writeBatch } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../firebase';
@@ -16,6 +16,7 @@ export default function SolicitacoesCondominio({ navigation }: any) {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [itens, setItens] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [processandoId, setProcessandoId] = useState('');
 
   useEffect(() => {
     if (!perfil?.condominioId) { setItens([]); setLoading(false); return; }
@@ -26,21 +27,46 @@ export default function SolicitacoesCondominio({ navigation }: any) {
       dados.sort((a,b) => (b.criadaEm?.seconds || 0) - (a.criadaEm?.seconds || 0));
       setItens(dados);
       setLoading(false);
-    }, () => setLoading(false));
+    }, e => {
+      setLoading(false);
+      const codigo = String((e as any)?.code || '');
+      Alert.alert('Solicitações', codigo.includes('permission-denied') ? 'O Firestore bloqueou a leitura. Publique as regras mais recentes do Cegonha.' : 'Não foi possível carregar as solicitações.');
+    });
   }, [perfil?.condominioId]);
 
   async function decidir(item: any, status: 'aprovada' | 'rejeitada') {
+    if (!perfil?.id || !perfil?.condominioId || processandoId) return;
     try {
-      await updateDoc(doc(db, 'solicitacoesCondominio', item.id), { status, decididoPorId: perfil?.id, decididoPorNome: perfil?.nome, decididoEm: serverTimestamp() });
-      await addDoc(collection(db, 'notificacoes'), {
+      setProcessandoId(item.id);
+      const solicitacaoRef = doc(db, 'solicitacoesCondominio', item.id);
+      const notificacaoRef = doc(collection(db, 'notificacoes'));
+      const batch = writeBatch(db);
+      batch.update(solicitacaoRef, {
+        status,
+        decididoPorId: perfil.id,
+        decididoPorNome: perfil.nome,
+        decididoEm: serverTimestamp(),
+        atualizadoEm: serverTimestamp(),
+      });
+      batch.set(notificacaoRef, {
+        destinatarioTipo: 'morador',
         moradorId: item.moradorId,
         condominioId: item.condominioId,
-        mensagem: status === 'aprovada' ? 'Sua solicitação para entrar no condomínio foi aprovada. Abra o Perfil para concluir o vínculo.' : 'Sua solicitação de vínculo com o condomínio foi recusada pela portaria.',
+        referenciaId: item.id,
+        mensagem: status === 'aprovada'
+          ? 'Sua solicitação para entrar no condomínio foi aprovada. Abra o Perfil para concluir o vínculo.'
+          : 'Sua solicitação de vínculo com o condomínio foi recusada pela portaria.',
         tipo: 'vinculo',
         lida: false,
         criadaEm: serverTimestamp(),
       });
-    } catch (e:any) { Alert.alert('Solicitação', e?.message || 'Não foi possível atualizar a solicitação.'); }
+      await batch.commit();
+    } catch (e:any) {
+      const codigo = String(e?.code || '');
+      Alert.alert('Solicitação', codigo.includes('permission-denied') ? 'O Firestore bloqueou a operação. Publique as regras mais recentes do Cegonha.' : e?.message || 'Não foi possível atualizar a solicitação.');
+    } finally {
+      setProcessandoId('');
+    }
   }
 
   if (perfil?.tipo !== 'porteiro') return null;
@@ -48,13 +74,16 @@ export default function SolicitacoesCondominio({ navigation }: any) {
 
   return <SafeAreaView style={styles.safe}>
     <View style={styles.header}><TouchableOpacity style={styles.back} onPress={() => navigation.goBack()} accessibilityLabel="Voltar"><Ionicons name="arrow-back" size={22} color={colors.text} /></TouchableOpacity><View><Text style={styles.eyebrow}>CONDOMÍNIO</Text><Text style={styles.title}>Solicitações de entrada</Text></View></View>
-    {loading ? <LoadingCards /> : <FlatList contentContainerStyle={styles.list} data={pendentes} keyExtractor={i => i.id} ListEmptyComponent={<EmptyState icon="people-outline" title="Tudo em dia" text="Não há moradores aguardando aprovação." />} renderItem={({item}) => <View style={styles.card}>
-      <Text style={styles.name}>{item.moradorNome}</Text><Text style={styles.meta}>Bloco {item.bloco || '-'} · Ap. {item.apartamento || '-'}</Text><Text style={styles.meta}>{item.email || ''}</Text>
-      <View style={styles.actions}><TouchableOpacity style={styles.reject} onPress={() => decidir(item, 'rejeitada')}><Text style={styles.rejectText}>Recusar</Text></TouchableOpacity><TouchableOpacity style={styles.approve} onPress={() => decidir(item, 'aprovada')}><Ionicons name="checkmark" size={18} color="#fff" /><Text style={styles.approveText}>Aprovar</Text></TouchableOpacity></View>
-    </View>} />}
+    {loading ? <LoadingCards /> : <FlatList contentContainerStyle={styles.list} data={pendentes} keyExtractor={i => i.id} ListEmptyComponent={<EmptyState icon="people-outline" title="Tudo em dia" text="Não há moradores aguardando aprovação." />} renderItem={({item}) => {
+      const ocupado = processandoId === item.id;
+      return <View style={styles.card}>
+        <Text style={styles.name}>{item.moradorNome}</Text><Text style={styles.meta}>Bloco {item.bloco || '-'} · Ap. {item.apartamento || '-'}</Text><Text style={styles.meta}>{item.email || ''}</Text>
+        <View style={styles.actions}><TouchableOpacity style={[styles.reject, ocupado && styles.disabled]} onPress={() => decidir(item, 'rejeitada')} disabled={!!processandoId}><Text style={styles.rejectText}>{ocupado ? 'Salvando...' : 'Recusar'}</Text></TouchableOpacity><TouchableOpacity style={[styles.approve, ocupado && styles.disabled]} onPress={() => decidir(item, 'aprovada')} disabled={!!processandoId}><Ionicons name="checkmark" size={18} color="#fff" /><Text style={styles.approveText}>{ocupado ? 'Salvando...' : 'Aprovar'}</Text></TouchableOpacity></View>
+      </View>;
+    }} />}
   </SafeAreaView>;
 }
 
 function makeStyles(colors:ThemeColors){return StyleSheet.create({
-  safe:{flex:1,backgroundColor:colors.background},header:{paddingHorizontal:20,paddingTop:8,flexDirection:'row',alignItems:'center',gap:12},back:{width:42,height:42,borderRadius:21,backgroundColor:colors.surface,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:colors.border},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.7,color:colors.porter},title:{fontSize:30,fontWeight:'700',color:colors.text},list:{padding:20,paddingBottom:40},card:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,padding:17,marginBottom:11},name:{fontSize:21,fontWeight:'700'},meta:{fontSize:15,color:colors.muted,marginTop:2},actions:{flexDirection:'row',gap:9,marginTop:15},reject:{flex:1,height:44,borderRadius:radius.pill,borderWidth:1,borderColor:colors.border,alignItems:'center',justifyContent:'center'},rejectText:{fontWeight:'700',color:colors.text},approve:{flex:1,height:44,borderRadius:radius.pill,backgroundColor:colors.porter,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:6},approveText:{fontWeight:'700',color:'#fff'}
+  safe:{flex:1,backgroundColor:colors.background},header:{paddingHorizontal:20,paddingTop:8,flexDirection:'row',alignItems:'center',gap:12},back:{width:42,height:42,borderRadius:21,backgroundColor:colors.surface,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:colors.border},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.7,color:colors.porter},title:{fontSize:30,fontWeight:'700',color:colors.text},list:{padding:20,paddingBottom:40},card:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,padding:17,marginBottom:11},name:{fontSize:21,fontWeight:'700'},meta:{fontSize:15,color:colors.muted,marginTop:2},actions:{flexDirection:'row',gap:9,marginTop:15},reject:{flex:1,height:44,borderRadius:radius.pill,borderWidth:1,borderColor:colors.border,alignItems:'center',justifyContent:'center'},rejectText:{fontWeight:'700',color:colors.text},approve:{flex:1,height:44,borderRadius:radius.pill,backgroundColor:colors.porter,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:6},approveText:{fontWeight:'700',color:'#fff'},disabled:{opacity:.55}
 });}
