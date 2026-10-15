@@ -6,7 +6,8 @@ import {
   TextInputProps,
   TextProps,
 } from 'react-native';
-import { colors, fonts } from '../theme';
+import { fonts } from '../theme';
+import { useTheme } from '../context/ThemeContext';
 
 function familiaPorPeso(style: TextProps['style']) {
   const plano: any = StyleSheet.flatten(style) || {};
@@ -19,32 +20,23 @@ function familiaPorPeso(style: TextProps['style']) {
 }
 
 export function AppText({ style, ...props }: TextProps) {
+  const { colors } = useTheme();
   const fontFamily = familiaPorPeso(style);
-  return <RNText {...props} style={[styles.text, style, { fontFamily }]} />;
+  return <RNText {...props} style={[{ color: colors.text, fontFamily: fonts.regular }, style, { fontFamily }]} />;
 }
 
 export const AppTextInput = forwardRef<RNTextInput, TextInputProps>(function AppTextInput(
-  { style, placeholderTextColor = '#918A84', ...props },
+  { style, placeholderTextColor, ...props },
   ref
 ) {
+  const { colors } = useTheme();
   return (
     <RNTextInput
       ref={ref}
       {...props}
-      placeholderTextColor={placeholderTextColor}
-      style={[styles.input, style, { fontFamily: fonts.regular }]}
+      placeholderTextColor={placeholderTextColor || colors.muted}
+      selectionColor={colors.accent}
+      style={[{ color: colors.text, fontFamily: fonts.regular, fontSize: 17 }, style]}
     />
   );
-});
-
-const styles = StyleSheet.create({
-  text: {
-    color: colors.text,
-    fontFamily: fonts.regular,
-  },
-  input: {
-    color: colors.text,
-    fontFamily: fonts.regular,
-    fontSize: 17,
-  },
 });
