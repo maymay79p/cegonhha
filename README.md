@@ -44,8 +44,8 @@ npm run firebase:rules
 
 As regras devem ser publicadas somente depois de revisão/testes da branch de desenvolvimento.
 
-## Observações atuais
+## Limites atuais
 
-As notificações implementadas nesta etapa são notificações internas do aplicativo, armazenadas no Firestore e exibidas em tempo real para o morador. Push notification do sistema operacional com o aplicativo totalmente fechado exigirá uma etapa adicional com token de dispositivo e serviço de envio.
+As notificações desta etapa são internas ao aplicativo, armazenadas no Firestore e exibidas em tempo real. Push do sistema operacional com o aplicativo totalmente fechado exigirá tokens de dispositivo e um serviço de envio.
 
-A localização do condomínio é cadastrada como endereço e pode ser aberta no aplicativo de mapas do dispositivo. Um mapa incorporado dentro do Cegonha exigirá a inclusão de uma biblioteca/SDK de mapas e configuração adicional.
+A localização do condomínio é cadastrada como endereço e aberta no aplicativo de mapas do dispositivo. Um mapa incorporado no Cegonha exigirá uma biblioteca/SDK de mapas e configuração adicional.
