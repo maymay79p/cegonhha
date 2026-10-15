@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 
 export type PerfilUsuario = {
@@ -28,24 +28,11 @@ type AuthContextType = {
   aplicarPerfilLocal: (perfil: PerfilUsuario) => Promise<void>;
 };
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  perfil: null,
-  loading: true,
-  recarregarPerfil: async () => {},
-  aplicarPerfilLocal: async () => {},
-});
-
+const AuthContext = createContext<AuthContextType>({ user: null, perfil: null, loading: true, recarregarPerfil: async () => {}, aplicarPerfilLocal: async () => {} });
 const CACHE_PREFIX = '@cegonha/perfil:';
 
-export function chaveCachePerfil(uid: string) {
-  return `${CACHE_PREFIX}${uid}`;
-}
-
-export async function salvarPerfilNoCache(perfil: PerfilUsuario) {
-  await AsyncStorage.setItem(chaveCachePerfil(perfil.id), JSON.stringify(perfil));
-}
-
+export function chaveCachePerfil(uid: string) { return `${CACHE_PREFIX}${uid}`; }
+export async function salvarPerfilNoCache(perfil: PerfilUsuario) { await AsyncStorage.setItem(chaveCachePerfil(perfil.id), JSON.stringify(perfil)); }
 export async function lerPerfilDoCache(uid: string): Promise<PerfilUsuario | null> {
   try {
     const valor = await AsyncStorage.getItem(chaveCachePerfil(uid));
@@ -53,9 +40,7 @@ export async function lerPerfilDoCache(uid: string): Promise<PerfilUsuario | nul
     const dados = JSON.parse(valor);
     if (!dados?.id || !dados?.tipo) return null;
     return dados as PerfilUsuario;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -80,6 +65,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await aplicarPerfilLocal(dados);
   }
 
+  async function garantirDestaqueCodigo(dados: PerfilUsuario) {
+    if (dados.tipo !== 'porteiro' || !dados.condominioId || dados.mostrarCodigoCondominio !== undefined) return;
+    try {
+      const condo = await getDoc(doc(db, 'condominios', dados.condominioId));
+      if (condo.exists() && condo.data()?.criadoPor === dados.id) {
+        await updateDoc(doc(db, 'usuarios', dados.id), { mostrarCodigoCondominio: true });
+      }
+    } catch {}
+  }
+
   useEffect(() => {
     let unsubscribePerfil: (() => void) | undefined;
     let timerPerfilAusente: ReturnType<typeof setTimeout> | undefined;
@@ -89,7 +84,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       versao += 1;
       const versaoAtual = versao;
       setUser(currentUser);
-
       if (unsubscribePerfil) unsubscribePerfil();
       if (timerPerfilAusente) clearTimeout(timerPerfilAusente);
 
@@ -115,7 +109,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         doc(db, 'usuarios', currentUser.uid),
         snapshot => {
           if (versaoAtual !== versao) return;
-
           if (snapshot.exists()) {
             if (timerPerfilAusente) clearTimeout(timerPerfilAusente);
             const dados = { id: snapshot.id, ...snapshot.data() } as PerfilUsuario;
@@ -123,9 +116,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setPerfil(dados);
             setLoading(false);
             salvarPerfilNoCache(dados).catch(() => {});
+            garantirDestaqueCodigo(dados);
             return;
           }
-
           timerPerfilAusente = setTimeout(() => {
             if (versaoAtual !== versao) return;
             perfilRef.current = null;
@@ -134,9 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             AsyncStorage.removeItem(chaveCachePerfil(currentUser.uid)).catch(() => {});
           }, 5000);
         },
-        () => {
-          if (perfilRef.current?.id !== currentUser.uid) setLoading(false);
-        }
+        () => { if (perfilRef.current?.id !== currentUser.uid) setLoading(false); }
       );
     });
 
@@ -148,13 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  return (
-    <AuthContext.Provider value={{ user, perfil, loading, recarregarPerfil, aplicarPerfilLocal }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={{ user, perfil, loading, recarregarPerfil, aplicarPerfilLocal }}>{children}</AuthContext.Provider>;
 }
 
-export function useAuth() {
-  return useContext(AuthContext);
-}
+export function useAuth() { return useContext(AuthContext); }
