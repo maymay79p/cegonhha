@@ -72,9 +72,11 @@ export type ResultadoOCR = {
   apartamento?: string | null;
   candidatos: CandidatoOCR[];
   tempoMs?: number;
+  leituraId?: string;
 };
 
 export type OCRMeta = {
+  leituraId?: string;
   tipoTexto: 'impresso' | 'manuscrito';
   iluminacao: 'boa' | 'media' | 'ruim';
   tempoMs: number;
