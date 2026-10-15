@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../firebase';
@@ -30,7 +30,9 @@ function mensagemErro(e:any, padrao:string) {
   return e?.message || padrao;
 }
 
-export default function Mural() {
+const MOTIVOS = ['Spam ou propaganda', 'Ofensa ou assédio', 'Conteúdo impróprio', 'Outro motivo'];
+
+export default function Mural({ navigation }: any) {
   const { perfil, user } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -39,6 +41,10 @@ export default function Mural() {
   const [itens, setItens] = useState<any[]>([]);
   const [banido, setBanido] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [denunciaItem, setDenunciaItem] = useState<any>(null);
+  const [motivoDenuncia, setMotivoDenuncia] = useState('');
+  const [detalhesDenuncia, setDetalhesDenuncia] = useState('');
+  const [enviandoDenuncia, setEnviandoDenuncia] = useState(false);
 
   useEffect(() => {
     if (!perfil?.condominioId) return;
@@ -91,23 +97,38 @@ export default function Mural() {
     }
   }
 
-  async function denunciar(item: any) {
+  function abrirDenuncia(item: any) {
     if (!perfil || !user || item.autorId === user.uid) return;
+    setDenunciaItem(item);
+    setMotivoDenuncia('');
+    setDetalhesDenuncia('');
+  }
+
+  async function enviarDenuncia() {
+    if (!perfil || !user || !denunciaItem || !motivoDenuncia || enviandoDenuncia) return;
     try {
+      setEnviandoDenuncia(true);
       await addDoc(collection(db, 'muralDenuncias'), {
         condominioId: perfil.condominioId,
-        comentarioId: item.id,
-        comentarioTexto: item.texto || '',
-        autorId: item.autorId,
-        autorNome: item.autorNome || '',
+        comentarioId: denunciaItem.id,
+        comentarioTexto: denunciaItem.texto || '',
+        autorId: denunciaItem.autorId,
+        autorNome: denunciaItem.autorNome || '',
         denuncianteId: user.uid,
         denuncianteNome: perfil.nome || user.displayName || '',
+        motivo: motivoDenuncia,
+        detalhes: detalhesDenuncia.trim(),
         criadoEm: serverTimestamp(),
         status: 'pendente',
       });
-      Alert.alert('Denúncia enviada', 'A portaria poderá revisar esta publicação.');
+      setDenunciaItem(null);
+      setMotivoDenuncia('');
+      setDetalhesDenuncia('');
+      Alert.alert('Denúncia enviada', 'A denúncia foi registrada e já pode ser acompanhada na Central de denúncias.');
     } catch (e:any) {
       Alert.alert('Mural', mensagemErro(e, 'Não foi possível enviar a denúncia.'));
+    } finally {
+      setEnviandoDenuncia(false);
     }
   }
 
@@ -149,9 +170,17 @@ export default function Mural() {
   if (!perfil?.condominioId) return <View style={styles.container}><EmptyState icon="people-outline" title="Sem condomínio" text="Vincule sua conta a um condomínio para acessar o mural." /></View>;
 
   return <View style={styles.container}>
-    <Text style={styles.eyebrow}>COMUNIDADE</Text>
-    <Text style={styles.title}>Mural do condomínio</Text>
-    <Text style={styles.subtitle}>{perfil.condominioNome || 'Condomínio'}</Text>
+    <View style={styles.headingRow}>
+      <View style={{flex:1}}>
+        <Text style={styles.eyebrow}>COMUNIDADE</Text>
+        <Text style={styles.title}>Mural do condomínio</Text>
+        <Text style={styles.subtitle}>{perfil.condominioNome || 'Condomínio'}</Text>
+      </View>
+      <TouchableOpacity style={styles.reportCenter} onPress={()=>navigation.navigate('Denuncias')} accessibilityLabel="Abrir central de denúncias">
+        <Ionicons name="flag-outline" size={20} color={colors.warning}/>
+        <Text style={styles.reportCenterText}>Denúncias</Text>
+      </TouchableOpacity>
+    </View>
 
     <View style={styles.search}><Ionicons name="search-outline" size={18} color={colors.muted}/><TextInput style={styles.searchInput} placeholder="Pesquisar no mural" value={busca} onChangeText={setBusca}/></View>
 
@@ -190,15 +219,33 @@ export default function Mural() {
           </View>
           <Text style={styles.body}>{item.texto}</Text>
           <View style={styles.actions}>
-            {!ehAutor && <TouchableOpacity onPress={()=>denunciar(item)} style={styles.action}><Ionicons name="flag-outline" size={15} color={colors.warning}/><Text style={styles.actionText}>Denunciar</Text></TouchableOpacity>}
+            {!ehAutor && <TouchableOpacity onPress={()=>abrirDenuncia(item)} style={styles.action}><Ionicons name="flag-outline" size={15} color={colors.warning}/><Text style={styles.actionText}>Denunciar</Text></TouchableOpacity>}
             {perfil.tipo === 'porteiro' && !ehAutor && <TouchableOpacity onPress={()=>banir(item)} style={styles.action}><Ionicons name="ban-outline" size={15} color={colors.danger}/><Text style={[styles.actionText,{color:colors.danger}]}>Banir autor</Text></TouchableOpacity>}
           </View>
         </View>;
       }}
     />
+
+    <Modal visible={!!denunciaItem} transparent animationType="fade" onRequestClose={()=>setDenunciaItem(null)}>
+      <View style={styles.modalBackdrop}>
+        <View style={styles.modalCard}>
+          <View style={styles.modalTop}>
+            <View style={{flex:1}}><Text style={styles.modalTitle}>Denunciar publicação</Text><Text style={styles.modalHelp}>Escolha o motivo da denúncia. A portaria poderá revisar a publicação.</Text></View>
+            <TouchableOpacity onPress={()=>setDenunciaItem(null)}><Ionicons name="close" size={23} color={colors.muted}/></TouchableOpacity>
+          </View>
+          <View style={styles.reasonList}>
+            {MOTIVOS.map(motivo=><TouchableOpacity key={motivo} style={[styles.reason,motivoDenuncia===motivo&&styles.reasonActive]} onPress={()=>setMotivoDenuncia(motivo)}><Ionicons name={motivoDenuncia===motivo?'radio-button-on':'radio-button-off'} size={18} color={motivoDenuncia===motivo?colors.accent:colors.muted}/><Text style={styles.reasonText}>{motivo}</Text></TouchableOpacity>)}
+          </View>
+          <TextInput style={styles.detailsInput} placeholder="Detalhes opcionais" value={detalhesDenuncia} onChangeText={setDetalhesDenuncia} multiline maxLength={300}/>
+          <TouchableOpacity style={[styles.reportButton,(!motivoDenuncia||enviandoDenuncia)&&{opacity:.45}]} onPress={enviarDenuncia} disabled={!motivoDenuncia||enviandoDenuncia}>
+            <Ionicons name="flag" size={17} color="#fff"/><Text style={styles.reportButtonText}>{enviandoDenuncia?'Enviando...':'Enviar denúncia'}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
   </View>;
 }
 
 function makeStyles(colors:ThemeColors){return StyleSheet.create({
-  container:{flex:1,padding:20,paddingBottom:110,backgroundColor:colors.background},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.8,color:colors.accent},title:{fontSize:34,fontWeight:'700',marginTop:3},subtitle:{fontSize:15,color:colors.muted,marginBottom:12},search:{height:48,borderRadius:radius.pill,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,flexDirection:'row',alignItems:'center',paddingHorizontal:14},searchInput:{flex:1,paddingHorizontal:8},compose:{flexDirection:'row',gap:8,alignItems:'flex-end',marginVertical:12},input:{flex:1,minHeight:50,maxHeight:110,backgroundColor:colors.surface,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,padding:12},send:{width:48,height:48,borderRadius:24,backgroundColor:colors.accent,alignItems:'center',justifyContent:'center'},banned:{flexDirection:'row',gap:8,alignItems:'center',backgroundColor:colors.surfaceSoft,borderRadius:radius.medium,padding:12,marginBottom:10},bannedText:{flex:1,fontSize:14,color:colors.danger},card:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,padding:15,marginBottom:9},top:{flexDirection:'row',justifyContent:'space-between',gap:10},name:{fontSize:17,fontWeight:'700'},role:{fontSize:12,color:colors.muted,marginTop:2},body:{fontSize:16,lineHeight:22,marginTop:10},actions:{flexDirection:'row',gap:12,marginTop:12},action:{flexDirection:'row',alignItems:'center',gap:5},actionText:{fontSize:13,fontWeight:'700',color:colors.warning}
+  container:{flex:1,padding:20,paddingBottom:110,backgroundColor:colors.background},headingRow:{flexDirection:'row',alignItems:'flex-start',gap:10},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.8,color:colors.accent},title:{fontSize:34,fontWeight:'700',marginTop:3},subtitle:{fontSize:15,color:colors.muted,marginBottom:12},reportCenter:{alignItems:'center',justifyContent:'center',gap:3,minWidth:74,minHeight:54,paddingHorizontal:9,borderRadius:radius.medium,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},reportCenterText:{fontSize:11,fontWeight:'700',color:colors.warning},search:{height:48,borderRadius:radius.pill,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,flexDirection:'row',alignItems:'center',paddingHorizontal:14},searchInput:{flex:1,paddingHorizontal:8},compose:{flexDirection:'row',gap:8,alignItems:'flex-end',marginVertical:12},input:{flex:1,minHeight:50,maxHeight:110,backgroundColor:colors.surface,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,padding:12},send:{width:48,height:48,borderRadius:24,backgroundColor:colors.accent,alignItems:'center',justifyContent:'center'},banned:{flexDirection:'row',gap:8,alignItems:'center',backgroundColor:colors.surfaceSoft,borderRadius:radius.medium,padding:12,marginBottom:10},bannedText:{flex:1,fontSize:14,color:colors.danger},card:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,padding:15,marginBottom:9},top:{flexDirection:'row',justifyContent:'space-between',gap:10},name:{fontSize:17,fontWeight:'700'},role:{fontSize:12,color:colors.muted,marginTop:2},body:{fontSize:16,lineHeight:22,marginTop:10},actions:{flexDirection:'row',gap:12,marginTop:12},action:{flexDirection:'row',alignItems:'center',gap:5},actionText:{fontSize:13,fontWeight:'700',color:colors.warning},modalBackdrop:{flex:1,backgroundColor:'rgba(0,0,0,0.45)',alignItems:'center',justifyContent:'center',padding:20},modalCard:{width:'100%',maxWidth:520,backgroundColor:colors.surface,borderRadius:radius.large,padding:18,borderWidth:1,borderColor:colors.border},modalTop:{flexDirection:'row',gap:10},modalTitle:{fontSize:23,fontWeight:'700'},modalHelp:{fontSize:14,lineHeight:19,color:colors.muted,marginTop:3},reasonList:{marginTop:13,gap:7},reason:{flexDirection:'row',alignItems:'center',gap:8,minHeight:44,paddingHorizontal:12,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,backgroundColor:colors.background},reasonActive:{borderColor:colors.accent,backgroundColor:colors.accentSoft},reasonText:{fontSize:15,fontWeight:'700'},detailsInput:{minHeight:76,maxHeight:110,backgroundColor:colors.background,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,padding:11,marginTop:11,textAlignVertical:'top'},reportButton:{height:48,borderRadius:radius.pill,backgroundColor:colors.warning,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7,marginTop:12},reportButtonText:{color:'#fff',fontSize:15,fontWeight:'700'}
 });}
