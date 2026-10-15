@@ -136,6 +136,16 @@ export async function registrarChegada({ perfil, morador, descricao, textoOCR, f
       reconheceuApartamento: ocrMeta.reconheceuApartamento,
       criadoEm: serverTimestamp(),
     });
+
+    if (ocrMeta.leituraId) {
+      batch.update(doc(db, 'ocrLeituras', ocrMeta.leituraId), {
+        confirmado: true,
+        encomendaId: encomendaRef.id,
+        moradorConfirmadoId: morador.id,
+        moradorConfirmadoNome: morador.nome || '',
+        confirmadoEm: serverTimestamp(),
+      });
+    }
   }
 
   await batch.commit();
