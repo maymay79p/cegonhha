@@ -14,16 +14,31 @@ WebBrowser.maybeCompleteAuthSession();
 
 export const GOOGLE_ROLE_STORAGE_KEY = '@cegonha/google-role';
 
+const DEFAULT_GOOGLE_WEB_CLIENT_ID = '119682503943-7v6ggeoh1v3dmguafiu1jo08kk3gsuk3.apps.googleusercontent.com';
+const DEFAULT_GOOGLE_ANDROID_CLIENT_ID = '119682503943-ovdfu5uufg6jjvu1l643n4g1n73eicrl.apps.googleusercontent.com';
+
 type Props = {
   tipo: 'morador' | 'porteiro';
   disabled?: boolean;
   onSignedIn: (uid: string) => Promise<void>;
 };
 
+function webClientId() {
+  return process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim() || DEFAULT_GOOGLE_WEB_CLIENT_ID;
+}
+
+function androidClientId() {
+  return process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID?.trim() || DEFAULT_GOOGLE_ANDROID_CLIENT_ID;
+}
+
+function iosClientId() {
+  return process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim() || '';
+}
+
 function clientIdDaPlataforma() {
-  if (Platform.OS === 'android') return process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID?.trim() || '';
-  if (Platform.OS === 'ios') return process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim() || '';
-  return process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim() || '';
+  if (Platform.OS === 'android') return androidClientId();
+  if (Platform.OS === 'ios') return iosClientId();
+  return webClientId();
 }
 
 export function GoogleSignInButton(props: Props) {
@@ -42,7 +57,7 @@ function GoogleNotConfiguredButton({ disabled }: Props) {
       disabled={disabled}
       onPress={() => Alert.alert(
         'Login com Google',
-        'A integração já está preparada no aplicativo, mas falta configurar o Client ID do Google para este ambiente. Consulte a seção “Login com Google” do README.'
+        'Falta configurar o Client ID do Google para esta plataforma. Consulte a seção “Login com Google” do README.'
       )}
     >
       <Ionicons name="logo-google" size={20} color={colors.text} />
@@ -57,9 +72,9 @@ function ConfiguredGoogleSignInButton({ tipo, disabled, onSignedIn }: Props) {
   const [processando, setProcessando] = useState(false);
 
   const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+    webClientId: webClientId(),
+    androidClientId: androidClientId(),
+    iosClientId: iosClientId() || undefined,
     scopes: ['openid', 'profile', 'email'],
     selectAccount: true,
   });
