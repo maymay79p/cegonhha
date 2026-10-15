@@ -15,7 +15,8 @@
           "photosPermission": "O Cegonha precisa acessar suas fotos para analisar etiquetas de encomendas."
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-notifications"
     ],
     "android": {
       "package": "com.maymay79p.cegonha",
