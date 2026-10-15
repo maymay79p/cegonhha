@@ -10,7 +10,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EAS_NO_FROZEN_LOCKFILE": "1"
+        "EAS_NO_FROZEN_LOCKFILE": "1",
+        "CEGONHA_NATIVE_RUNTIME": "1"
       }
     },
     "preview": {
@@ -19,12 +20,14 @@
         "buildType": "apk"
       },
       "env": {
-        "EAS_NO_FROZEN_LOCKFILE": "1"
+        "EAS_NO_FROZEN_LOCKFILE": "1",
+        "CEGONHA_NATIVE_RUNTIME": "1"
       }
     },
     "production": {
       "env": {
-        "EAS_NO_FROZEN_LOCKFILE": "1"
+        "EAS_NO_FROZEN_LOCKFILE": "1",
+        "CEGONHA_NATIVE_RUNTIME": "1"
       }
     }
   },
