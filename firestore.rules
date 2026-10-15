@@ -139,18 +139,27 @@ service cloud.firestore {
       allow create: if logado()
         && mesmoCondominio(request.resource.data.condominioId)
         && request.resource.data.autorId == request.auth.uid
+        && request.resource.data.autorNome is string
+        && request.resource.data.autorNome.size() > 0
+        && request.resource.data.autorNome.size() <= 120
+        && request.resource.data.autorTipo == perfil().tipo
         && !banidoNoMural(request.resource.data.condominioId, request.auth.uid)
         && request.resource.data.texto is string
         && request.resource.data.texto.size() > 0
         && request.resource.data.texto.size() <= 1000;
       allow update: if false;
-      allow delete: if porteiro() && mesmoCondominio(resource.data.condominioId);
+      allow delete: if logado()
+        && mesmoCondominio(resource.data.condominioId)
+        && (resource.data.autorId == request.auth.uid || porteiro());
     }
 
     match /muralDenuncias/{id} {
       allow create: if logado()
         && mesmoCondominio(request.resource.data.condominioId)
-        && request.resource.data.denuncianteId == request.auth.uid;
+        && request.resource.data.denuncianteId == request.auth.uid
+        && request.resource.data.autorId != request.auth.uid
+        && request.resource.data.comentarioId is string
+        && request.resource.data.comentarioId.size() > 0;
       allow read, update: if porteiro() && mesmoCondominio(resource.data.condominioId);
       allow delete: if false;
     }
