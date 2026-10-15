@@ -2,9 +2,6 @@ import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from './firebase';
 import { ResultadoOCR } from './types';
 
-const OCR_SPACE_ENDPOINT = 'https://api.ocr.space/parse/image';
-const OCR_SPACE_KEY = process.env.EXPO_PUBLIC_OCR_SPACE_API_KEY?.trim();
-
 function normalizar(valor = '') {
   return valor
     .normalize('NFD')
@@ -28,7 +25,7 @@ function levenshtein(a: string, b: string) {
   b = normalizar(b);
   const matriz = Array.from({ length: b.length + 1 }, () => Array(a.length + 1).fill(0));
   for (let i = 0; i <= b.length; i += 1) matriz[i][0] = i;
-  for (let j = 0; j <= a.length; j += 1) matriz[0][j] = j;
+  for (let j = 1; j <= a.length; j += 1) matriz[0][j] = j;
   for (let i = 1; i <= b.length; i += 1) {
     for (let j = 1; j <= a.length; j += 1) {
       const custo = b[i - 1] === a[j - 1] ? 0 : 1;
@@ -45,6 +42,13 @@ function similaridade(a = '', b = '') {
   return Math.max(0, 1 - levenshtein(aa, bb) / Math.max(aa.length, bb.length));
 }
 
+function linhaSeguinteAoRotulo(linhas: string[], rotulos: RegExp) {
+  const indice = linhas.findIndex(linha => rotulos.test(linha));
+  if (indice < 0 || indice + 1 >= linhas.length) return null;
+  const proxima = linhas[indice + 1]?.trim() || '';
+  return proxima.length >= 3 ? proxima : null;
+}
+
 function extrairDados(texto: string) {
   const linhas = texto.split(/\r?\n/).map(v => v.trim()).filter(Boolean);
   const blocoMatch = texto.match(/\b(?:bloco|bl|torre)\s*[:\-]?\s*([a-z0-9]{1,5})\b/i);
@@ -55,10 +59,13 @@ function extrairDados(texto: string) {
 
   let nome = nomeRotulado ? nomeRotulado[1].trim() : null;
   if (!nome) {
+    nome = linhaSeguinteAoRotulo(linhas, /^(?:destinat[aá]rio|destino|recebedor|nome)\s*:??\s*$/i);
+  }
+  if (!nome) {
     nome = linhas.find(linha =>
       /^[A-Za-zÀ-ÿ' -]{5,70}$/.test(linha) &&
       linha.split(/\s+/).length >= 2 &&
-      !/rua|avenida|av\.|cep|cpf|bloco|apartamento|apto|pedido|nota|remetente|telefone|transportadora/i.test(linha)
+      !/rua|avenida|av\.|cep|cpf|bloco|apartamento|apto|pedido|nota|remetente|telefone|transportadora|destinat[aá]rio/i.test(linha)
     ) || null;
   }
 
@@ -84,36 +91,30 @@ function calcularScore(dados: any, morador: any) {
   return partes.reduce((s, p) => s + p.valor * p.peso, 0) / pesoTotal;
 }
 
-async function lerTextoOCRSpace(base64: string) {
-  if (!OCR_SPACE_KEY) throw new Error('Falta a chave do OCR.Space. Crie um arquivo .env com EXPO_PUBLIC_OCR_SPACE_API_KEY e reinicie o app.');
-  const form = new FormData();
-  const conteudo = base64.startsWith('data:') ? base64 : `data:image/jpeg;base64,${base64}`;
-  form.append('base64Image', conteudo);
-  form.append('OCREngine', '3');
-  form.append('language', 'auto');
-  form.append('isOverlayRequired', 'false');
-  form.append('detectOrientation', 'true');
-  form.append('scale', 'true');
-
-  const resposta = await fetch(OCR_SPACE_ENDPOINT, { method: 'POST', headers: { apikey: OCR_SPACE_KEY }, body: form });
-  if (!resposta.ok) {
-    if (resposta.status === 401 || resposta.status === 403) throw new Error('A chave do OCR.Space está inválida ou expirou. Atualize EXPO_PUBLIC_OCR_SPACE_API_KEY no .env e reinicie o app.');
-    throw new Error(`O serviço OCR respondeu com erro ${resposta.status}. Tente novamente em alguns instantes.`);
+async function lerTextoMLKit(imagemUri: string) {
+  if (!imagemUri) throw new Error('A imagem da etiqueta não foi encontrada.');
+  try {
+    const modulo = await import('@react-native-ml-kit/text-recognition');
+    const TextRecognition = modulo.default;
+    const resultado = await TextRecognition.recognize(imagemUri);
+    const texto = String(resultado?.text || '').trim();
+    if (!texto) throw new Error('Nenhum texto foi reconhecido. Tente uma foto mais nítida, reta e bem iluminada.');
+    return texto;
+  } catch (erro: any) {
+    const mensagem = String(erro?.message || erro || '');
+    if (/native module|cannot find|not found|undefined|turbo/i.test(mensagem)) {
+      throw new Error('O Google ML Kit não está disponível nesta instalação do Cegonha. Instale as dependências e gere uma nova development build do Android.');
+    }
+    throw erro;
   }
-
-  const json: any = await resposta.json();
-  if (json?.IsErroredOnProcessing) {
-    const mensagens = Array.isArray(json?.ErrorMessage) ? json.ErrorMessage.join(' ') : json?.ErrorMessage;
-    throw new Error(mensagens || 'O OCR gratuito não conseguiu processar a imagem.');
-  }
-  const texto = (json?.ParsedResults || []).map((item: any) => item?.ParsedText || '').join('\n').trim();
-  if (!texto) throw new Error('Nenhum texto foi reconhecido. Tente uma foto mais nítida e bem iluminada.');
-  return texto;
 }
 
-export async function reconhecerEtiqueta(base64: string, condominioId: string): Promise<ResultadoOCR> {
+export async function reconhecerEtiqueta(imagemUri: string, condominioId: string): Promise<ResultadoOCR> {
   if (!condominioId) throw new Error('A conta da portaria ainda não está vinculada a um condomínio.');
-  const texto = await lerTextoOCRSpace(base64);
+
+  // O reconhecimento é feito localmente no aparelho pelo Google ML Kit.
+  // Depois, o Cegonha cruza os dados lidos com os moradores do condomínio.
+  const texto = await lerTextoMLKit(imagemUri);
   const dados = extrairDados(texto);
   const snap = await getDocs(query(collection(db, 'usuarios'), where('condominioId', '==', condominioId)));
   const candidatos = snap.docs
@@ -137,19 +138,6 @@ export async function reconhecerEtiqueta(base64: string, condominioId: string): 
     .filter(c => c.score >= 0.35)
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
-  return { texto, ...dados, candidatos };
-}
 
-export async function uriParaBase64(uri: string): Promise<string> {
-  const response = await fetch(uri);
-  const blob = await response.blob();
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = reject;
-    reader.onloadend = () => {
-      const valor = String(reader.result || '');
-      resolve(valor.includes(',') ? valor.split(',')[1] : valor);
-    };
-    reader.readAsDataURL(blob);
-  });
+  return { texto, ...dados, candidatos, motor: 'google-ml-kit' };
 }
