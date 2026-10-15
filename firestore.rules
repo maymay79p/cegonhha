@@ -156,7 +156,11 @@ service cloud.firestore {
     }
 
     match /muralBanidos/{id} {
-      allow read: if logado() && mesmoCondominio(resource.data.condominioId);
+      allow get: if logado() && (
+        id == perfil().get('condominioId', '') + '_' + request.auth.uid ||
+        (resource != null && porteiro() && mesmoCondominio(resource.data.condominioId))
+      );
+      allow list: if porteiro() && mesmoCondominio(resource.data.condominioId);
       allow create, update: if porteiro() && mesmoCondominio(request.resource.data.condominioId);
       allow delete: if false;
     }
