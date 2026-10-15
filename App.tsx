@@ -1,0 +1,223 @@
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useFonts } from 'expo-font';
+import {
+  EBGaramond_400Regular,
+  EBGaramond_500Medium,
+  EBGaramond_600SemiBold,
+  EBGaramond_700Bold,
+} from '@expo-google-fonts/eb-garamond';
+
+import Login from './Screens/Login';
+import Register from './Screens/Register';
+import RecuperaSenha from './Screens/RecuperaSenha';
+import OCR from './Screens/OCR';
+import EncomendaForm from './Screens/EncomendaForm';
+import Detalhes from './Screens/Detalhes';
+import Notificacoes from './Screens/Notificacoes';
+import Relatorios from './Screens/Relatorios';
+import Perfil from './Screens/Perfil';
+import Previsoes from './Screens/Previsoes';
+import MoradorHome from './Screens/MoradorHome';
+import MoradorEncomendas from './Screens/MoradorEncomendas';
+import PorteiroHome from './Screens/PorteiroHome';
+import PorteiroEncomendas from './Screens/PorteiroEncomendas';
+import SolicitacoesCondominio from './Screens/SolicitacoesCondominio';
+import Privacidade from './Screens/Privacidade';
+import Onboarding from './Screens/Onboarding';
+import { RootStackParamList } from './types';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { AppText } from './components/AppText';
+import { colors, fonts, shadow } from './theme';
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
+const MoradorTab = createBottomTabNavigator();
+const PorteiroTab = createBottomTabNavigator();
+const ONBOARDING_KEY = '@cegonha/onboarding:v2';
+
+const moradorIcons: Record<string, { on: string; off: string }> = {
+  Inicio: { on: 'home', off: 'home-outline' },
+  MinhasEncomendas: { on: 'cube', off: 'cube-outline' },
+  Previsoes: { on: 'time', off: 'time-outline' },
+  Notificacoes: { on: 'notifications', off: 'notifications-outline' },
+  Perfil: { on: 'person', off: 'person-outline' },
+};
+
+const porteiroIcons: Record<string, { on: string; off: string }> = {
+  Painel: { on: 'grid', off: 'grid-outline' },
+  Encomendas: { on: 'cube', off: 'cube-outline' },
+  OCR: { on: 'scan', off: 'scan-outline' },
+  Relatorios: { on: 'bar-chart', off: 'bar-chart-outline' },
+  Perfil: { on: 'person', off: 'person-outline' },
+};
+
+function FloatingTabIcon({ routeName, focused, color, porter = false }: any) {
+  const mapa = porter ? porteiroIcons : moradorIcons;
+  const item = mapa[routeName] || { on: 'ellipse', off: 'ellipse-outline' };
+  return (
+    <View style={[styles.iconWrap, focused && (porter ? styles.iconWrapPorter : styles.iconWrapResident)]}>
+      <Ionicons name={(focused ? item.on : item.off) as any} size={21} color={color} />
+    </View>
+  );
+}
+
+function tabBarStyle(bottom: number) {
+  return {
+    position: 'absolute' as const,
+    left: 14,
+    right: 14,
+    bottom: Math.max(bottom, 8) + 8,
+    height: 68,
+    paddingTop: 7,
+    paddingBottom: 7,
+    backgroundColor: colors.surface,
+    borderTopWidth: 0,
+    borderRadius: 28,
+    ...shadow,
+  };
+}
+
+function MoradorTabs() {
+  const insets = useSafeAreaInsets();
+  return (
+    <MoradorTab.Navigator
+      id="MoradorTabs"
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarIcon: ({ focused, color }) => <FloatingTabIcon routeName={route.name} focused={focused} color={color} />,
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: '#8D8884',
+        tabBarStyle: tabBarStyle(insets.bottom),
+        tabBarLabelStyle: { fontFamily: fonts.semiBold, fontSize: 12, marginTop: -2 },
+        tabBarItemStyle: { borderRadius: 24 },
+      })}
+    >
+      <MoradorTab.Screen name="Inicio" component={MoradorHome} options={{ title: 'Início' }} />
+      <MoradorTab.Screen name="MinhasEncomendas" component={MoradorEncomendas} options={{ title: 'Encomendas' }} />
+      <MoradorTab.Screen name="Previsoes" component={Previsoes} options={{ title: 'Esperadas' }} />
+      <MoradorTab.Screen name="Notificacoes" component={Notificacoes} options={{ title: 'Avisos' }} />
+      <MoradorTab.Screen name="Perfil" component={Perfil} options={{ title: 'Perfil' }} />
+    </MoradorTab.Navigator>
+  );
+}
+
+function PorteiroTabs() {
+  const { perfil } = useAuth();
+  const insets = useSafeAreaInsets();
+  return (
+    <PorteiroTab.Navigator
+      id="PorteiroTabs"
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarIcon: ({ focused, color }) => <FloatingTabIcon routeName={route.name} focused={focused} color={color} porter />,
+        tabBarActiveTintColor: colors.porter,
+        tabBarInactiveTintColor: '#8D8884',
+        tabBarStyle: tabBarStyle(insets.bottom),
+        tabBarLabelStyle: { fontFamily: fonts.semiBold, fontSize: 12, marginTop: -2 },
+        tabBarItemStyle: { borderRadius: 24 },
+      })}
+    >
+      <PorteiroTab.Screen name="Painel" component={PorteiroHome} options={{ title: 'Painel' }} />
+      <PorteiroTab.Screen name="Encomendas" component={PorteiroEncomendas} options={{ title: 'Entregas' }} />
+      <PorteiroTab.Screen name="OCR" component={OCR} options={{ title: 'Leitura' }} />
+      {perfil?.tipo === 'sindico' && <PorteiroTab.Screen name="Relatorios" component={Relatorios} options={{ title: 'Relatórios' }} />}
+      <PorteiroTab.Screen name="Perfil" component={Perfil} options={{ title: 'Perfil' }} />
+    </PorteiroTab.Navigator>
+  );
+}
+
+function AreaAutenticada() {
+  const { perfil } = useAuth();
+  if (!perfil) return null;
+  return perfil.tipo === 'morador' ? <MoradorTabs /> : <PorteiroTabs />;
+}
+
+function RootNavigator() {
+  const { user, perfil, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color={colors.accent} />
+        <AppText style={styles.loadingText}>Abrindo sua conta...</AppText>
+      </View>
+    );
+  }
+
+  const noHeader = { headerShown: false, contentStyle: { backgroundColor: colors.background } };
+
+  return (
+    <NavigationContainer>
+      {!user ? (
+        <Stack.Navigator id="PublicStack" screenOptions={noHeader}>
+          <Stack.Screen name="Login" component={Login} />
+          <Stack.Screen name="Register" component={Register} />
+          <Stack.Screen name="RecuperaSenha" component={RecuperaSenha} />
+        </Stack.Navigator>
+      ) : !perfil ? (
+        <Stack.Navigator id="ProfileStack" screenOptions={noHeader}>
+          <Stack.Screen name="Perfil" component={Perfil} />
+          <Stack.Screen name="Privacidade" component={Privacidade} />
+        </Stack.Navigator>
+      ) : (
+        <Stack.Navigator id="AuthenticatedStack" screenOptions={noHeader}>
+          <Stack.Screen name="Home" component={AreaAutenticada} />
+          {perfil.tipo === 'porteiro' && <Stack.Screen name="OCR" component={OCR} />}
+          {perfil.tipo === 'porteiro' && <Stack.Screen name="EncomendaForm" component={EncomendaForm} />}
+          <Stack.Screen name="Detalhes" component={Detalhes} />
+          {(perfil.tipo === 'sindico' || perfil.tipo === 'porteiro') && <Stack.Screen name="Relatorios" component={Relatorios} />}
+          <Stack.Screen name="Notificacoes" component={Notificacoes} />
+          <Stack.Screen name="Perfil" component={Perfil} />
+          {perfil.tipo === 'morador' && <Stack.Screen name="Previsoes" component={Previsoes} />}
+          {(perfil.tipo === 'porteiro' || perfil.tipo === 'sindico') && <Stack.Screen name="SolicitacoesCondominio" component={SolicitacoesCondominio} />}
+          <Stack.Screen name="Privacidade" component={Privacidade} />
+        </Stack.Navigator>
+      )}
+    </NavigationContainer>
+  );
+}
+
+function AppWithFonts() {
+  const [fontsLoaded] = useFonts({
+    EBGaramond_400Regular,
+    EBGaramond_500Medium,
+    EBGaramond_600SemiBold,
+    EBGaramond_700Bold,
+  });
+  const [onboarding, setOnboarding] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem(ONBOARDING_KEY).then(v => setOnboarding(v === 'ok')).catch(() => setOnboarding(false));
+  }, []);
+
+  if (!fontsLoaded || onboarding === null) {
+    return <View style={styles.loading}><ActivityIndicator size="large" color={colors.accent} /></View>;
+  }
+
+  if (!onboarding) {
+    return <Onboarding onFinish={async () => {
+      await AsyncStorage.setItem(ONBOARDING_KEY, 'ok');
+      setOnboarding(true);
+    }} />;
+  }
+
+  return <AuthProvider><RootNavigator /></AuthProvider>;
+}
+
+export default function App() {
+  return <SafeAreaProvider><AppWithFonts /></SafeAreaProvider>;
+}
+
+const styles = StyleSheet.create({
+  loading:{flex:1,alignItems:'center',justifyContent:'center',backgroundColor:colors.background},
+  loadingText:{marginTop:12,color:colors.muted,fontSize:17},
+  iconWrap:{width:32,height:28,borderRadius:14,alignItems:'center',justifyContent:'center'},
+  iconWrapResident:{backgroundColor:colors.accentSoft},
+  iconWrapPorter:{backgroundColor:colors.porterSoft},
+});

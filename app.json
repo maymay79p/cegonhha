@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Cegonha",
+    "slug": "cegonha",
+    "scheme": "cegonha",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "O Cegonha precisa usar a câmera para fotografar etiquetas de encomendas.",
+          "photosPermission": "O Cegonha precisa acessar suas fotos para analisar etiquetas de encomendas."
+        }
+      ],
+      "expo-web-browser"
+    ],
+    "android": {
+      "package": "com.maymay79p.cegonha",
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "ios": {
+      "bundleIdentifier": "com.maymay79p.cegonha"
+    }
+  }
+}

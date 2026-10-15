@@ -1,0 +1,108 @@
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
+export type TipoUsuario = 'morador' | 'porteiro' | 'sindico';
+export type StatusEncomenda = 'prevista' | 'recebida' | 'pendente' | 'retirada';
+
+export type Morador = {
+  id: string;
+  nome: string;
+  email: string;
+  telefone?: string;
+  cpf?: string;
+  bloco?: string;
+  apartamento?: string;
+  tipo: TipoUsuario;
+  condominioId: string;
+  condominioNome?: string;
+  condominioCodigo?: string;
+  fotoPerfil?: string;
+};
+
+export type HistoricoEvento = {
+  tipo: 'prevista' | 'recebida' | 'pendente' | 'retirada' | 'lembrete';
+  titulo: string;
+  data: string;
+  atorId?: string;
+  atorNome?: string;
+  observacao?: string;
+};
+
+export type Encomenda = {
+  id: string;
+  moradorId: string;
+  moradorNome: string;
+  bloco: string;
+  apartamento: string;
+  descricao?: string;
+  status: StatusEncomenda;
+  recebidaEm?: any;
+  retiradaEm?: any;
+  porteiroId: string;
+  porteiroNome?: string;
+  retiradaPorId?: string;
+  retiradaPorNome?: string;
+  textoOCR?: string;
+  ocrScore?: number;
+  origem?: 'ocr' | 'manual';
+  condominioId: string;
+  codigoReferencia?: string;
+  historico?: HistoricoEvento[];
+  lembrete3dEnviado?: boolean;
+};
+
+export type Previsao = {
+  id: string;
+  moradorId: string;
+  condominioId: string;
+  descricao: string;
+  codigoRastreio?: string;
+  transportadora?: string;
+  previsao?: string;
+  atrasada?: boolean;
+  criadaEm?: any;
+};
+
+export type CandidatoOCR = Morador & { score: number };
+
+export type ResultadoOCR = {
+  texto: string;
+  nome?: string | null;
+  bloco?: string | null;
+  apartamento?: string | null;
+  candidatos: CandidatoOCR[];
+  tempoMs?: number;
+};
+
+export type OCRMeta = {
+  tipoTexto: 'impresso' | 'manuscrito';
+  iluminacao: 'boa' | 'media' | 'ruim';
+  tempoMs: number;
+  topCandidatoId?: string;
+  topScore?: number;
+  reconheceuNome: boolean;
+  reconheceuBloco: boolean;
+  reconheceuApartamento: boolean;
+};
+
+export type RootStackParamList = {
+  Login: undefined;
+  Register: { tipoInicial?: 'morador' | 'porteiro' } | undefined;
+  RecuperaSenha: undefined;
+  Home: undefined;
+  OCR: undefined;
+  EncomendaForm: {
+    candidato?: CandidatoOCR;
+    textoOCR?: string;
+    fotoEtiqueta?: string;
+    ocrMeta?: OCRMeta;
+  } | undefined;
+  Detalhes: { encomenda: Encomenda };
+  Relatorios: undefined;
+  Notificacoes: undefined;
+  Perfil: undefined;
+  Previsoes: undefined;
+  SolicitacoesCondominio: undefined;
+  Privacidade: undefined;
+};
+
+export type NavigationProps = NativeStackNavigationProp<RootStackParamList>;
