@@ -1,12 +1,11 @@
 import {
-  addDoc,
   arrayUnion,
   collection,
   doc,
   getDocs,
   query,
+  runTransaction,
   serverTimestamp,
-  updateDoc,
   where,
   writeBatch,
 } from 'firebase/firestore';
@@ -86,9 +85,11 @@ export async function registrarChegada({ perfil, morador, descricao, textoOCR, f
   });
 
   batch.set(notificacaoRef, {
+    destinatarioTipo: 'morador',
     moradorId: morador.id,
     condominioId: condominioAtual,
     encomendaId: encomendaRef.id,
+    referenciaId: encomendaRef.id,
     mensagem: `Sua encomenda chegou à portaria${descricao.trim() ? `: ${descricao.trim()}` : ''}.`,
     tipo: 'chegada',
     lida: false,
@@ -159,20 +160,91 @@ export async function registrarChegada({ perfil, morador, descricao, textoOCR, f
 
 export async function registrarRetirada(encomenda: Encomenda, perfil: any) {
   if (perfil?.tipo !== 'porteiro') throw new Error('Apenas a portaria pode registrar retiradas.');
-  const ev = evento('retirada', 'Retirada registrada', perfil.id, perfil.nome);
-  await Promise.all([
-    updateDoc(doc(db, 'encomendas', encomenda.id), { status: 'retirada', retiradaEm: serverTimestamp(), retiradaPorId: perfil.id, retiradaPorNome: perfil.nome, historico: arrayUnion(ev) }),
-    addDoc(collection(db, 'notificacoes'), { moradorId: encomenda.moradorId, condominioId: encomenda.condominioId, encomendaId: encomenda.id, mensagem: 'A retirada da sua encomenda foi registrada pela portaria.', tipo: 'retirada', lida: false, criadaEm: serverTimestamp() }),
-    addDoc(collection(db, 'auditoria'), { encomendaId: encomenda.id, condominioId: encomenda.condominioId, moradorId: encomenda.moradorId, atorId: perfil.id, atorNome: perfil.nome, acao: 'retirada_registrada', criadoEm: serverTimestamp() }),
-  ]);
+  if (!perfil?.condominioId || encomenda.condominioId !== perfil.condominioId) throw new Error('Esta encomenda não pertence ao condomínio da portaria.');
+
+  const encomendaRef = doc(db, 'encomendas', encomenda.id);
+  const notificacaoRef = doc(collection(db, 'notificacoes'));
+  const auditoriaRef = doc(collection(db, 'auditoria'));
+
+  return runTransaction(db, async transaction => {
+    const snap = await transaction.get(encomendaRef);
+    if (!snap.exists()) throw new Error('Encomenda não encontrada.');
+    const atual = { id: snap.id, ...snap.data() } as any;
+    if (atual.condominioId !== perfil.condominioId) throw new Error('Esta encomenda não pertence ao condomínio da portaria.');
+    if (atual.status !== 'pendente') return false;
+
+    const ev = evento('retirada', 'Retirada registrada', perfil.id, perfil.nome);
+    transaction.update(encomendaRef, {
+      status: 'retirada',
+      retiradaEm: serverTimestamp(),
+      retiradaPorId: perfil.id,
+      retiradaPorNome: perfil.nome,
+      historico: arrayUnion(ev),
+    });
+    transaction.set(notificacaoRef, {
+      destinatarioTipo: 'morador',
+      moradorId: atual.moradorId,
+      condominioId: atual.condominioId,
+      encomendaId: atual.id,
+      referenciaId: atual.id,
+      mensagem: 'A retirada da sua encomenda foi registrada pela portaria.',
+      tipo: 'retirada',
+      lida: false,
+      criadaEm: serverTimestamp(),
+    });
+    transaction.set(auditoriaRef, {
+      encomendaId: atual.id,
+      condominioId: atual.condominioId,
+      moradorId: atual.moradorId,
+      atorId: perfil.id,
+      atorNome: perfil.nome,
+      acao: 'retirada_registrada',
+      criadoEm: serverTimestamp(),
+    });
+    return true;
+  });
 }
 
 export async function enviarLembreteAtrasado(encomenda: Encomenda, perfil: any) {
-  if (encomenda.lembrete3dEnviado || encomenda.status !== 'pendente') return;
-  const ev = evento('lembrete', 'Lembrete de retirada enviado', perfil.id, perfil.nome);
-  await Promise.all([
-    updateDoc(doc(db, 'encomendas', encomenda.id), { lembrete3dEnviado: true, historico: arrayUnion(ev) }),
-    addDoc(collection(db, 'notificacoes'), { moradorId: encomenda.moradorId, condominioId: encomenda.condominioId, encomendaId: encomenda.id, mensagem: 'Sua encomenda está há mais de 3 dias aguardando retirada na portaria.', tipo: 'lembrete', lida: false, criadaEm: serverTimestamp() }),
-    addDoc(collection(db, 'auditoria'), { encomendaId: encomenda.id, condominioId: encomenda.condominioId, moradorId: encomenda.moradorId, atorId: perfil.id, atorNome: perfil.nome, acao: 'lembrete_3_dias', criadoEm: serverTimestamp() }),
-  ]);
+  if (perfil?.tipo !== 'porteiro' || !perfil?.condominioId) return false;
+  const encomendaRef = doc(db, 'encomendas', encomenda.id);
+  const notificacaoRef = doc(collection(db, 'notificacoes'));
+  const auditoriaRef = doc(collection(db, 'auditoria'));
+
+  return runTransaction(db, async transaction => {
+    const snap = await transaction.get(encomendaRef);
+    if (!snap.exists()) return false;
+    const atual = { id: snap.id, ...snap.data() } as any;
+    if (atual.condominioId !== perfil.condominioId) return false;
+    if (atual.lembrete3dEnviado || atual.status !== 'pendente') return false;
+    const recebidaEm = atual.recebidaEm?.toDate?.()?.getTime?.() || 0;
+    if (!recebidaEm || Date.now() - recebidaEm < 3 * 86400000) return false;
+
+    const ev = evento('lembrete', 'Lembrete de retirada enviado', perfil.id, perfil.nome);
+    transaction.update(encomendaRef, {
+      lembrete3dEnviado: true,
+      historico: arrayUnion(ev),
+    });
+    transaction.set(notificacaoRef, {
+      destinatarioTipo: 'morador',
+      moradorId: atual.moradorId,
+      condominioId: atual.condominioId,
+      encomendaId: atual.id,
+      referenciaId: atual.id,
+      mensagem: 'Sua encomenda está há mais de 3 dias aguardando retirada na portaria.',
+      tipo: 'lembrete',
+      lida: false,
+      criadaEm: serverTimestamp(),
+    });
+    transaction.set(auditoriaRef, {
+      encomendaId: atual.id,
+      condominioId: atual.condominioId,
+      moradorId: atual.moradorId,
+      atorId: perfil.id,
+      atorNome: perfil.nome,
+      acao: 'lembrete_3_dias',
+      criadoEm: serverTimestamp(),
+    });
+    return true;
+  });
 }
