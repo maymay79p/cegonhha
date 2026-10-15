@@ -12,6 +12,8 @@ import {
 import { auth, db } from '../firebase';
 import { Encomenda, HistoricoEvento, OCRMeta } from '../types';
 
+const LIMITE_DESCRICAO = 300;
+
 function agoraISO() {
   return new Date().toISOString();
 }
@@ -48,8 +50,10 @@ export async function registrarChegada({ perfil, morador, descricao, textoOCR, f
 }) {
   const uidAtual = auth.currentUser?.uid || perfil?.id || '';
   const condominioAtual = perfil?.condominioId || '';
+  const descricaoLimpa = descricao.trim();
   if (!uidAtual || !condominioAtual) throw new Error('Sua conta de portaria está sem condomínio vinculado. Faça logout e login novamente.');
   if (perfil?.tipo !== 'porteiro') throw new Error('Apenas a portaria pode registrar encomendas.');
+  if (descricaoLimpa.length > LIMITE_DESCRICAO) throw new Error(`A descrição deve ter no máximo ${LIMITE_DESCRICAO} caracteres.`);
 
   const encomendaRef = doc(collection(db, 'encomendas'));
   const notificacaoRef = doc(collection(db, 'notificacoes'));
@@ -68,7 +72,7 @@ export async function registrarChegada({ perfil, morador, descricao, textoOCR, f
     moradorNome: morador.nome,
     bloco: morador.bloco || '',
     apartamento: morador.apartamento || '',
-    descricao: descricao.trim() || previsao?.descricao || '',
+    descricao: descricaoLimpa || previsao?.descricao || '',
     textoOCR: textoOCR || '',
     ocrScore: ocrMeta?.topScore || 0,
     origem: textoOCR ? 'ocr' : 'manual',
@@ -90,7 +94,7 @@ export async function registrarChegada({ perfil, morador, descricao, textoOCR, f
     condominioId: condominioAtual,
     encomendaId: encomendaRef.id,
     referenciaId: encomendaRef.id,
-    mensagem: `Sua encomenda chegou à portaria${descricao.trim() ? `: ${descricao.trim()}` : ''}.`,
+    mensagem: `Sua encomenda chegou à portaria${descricaoLimpa ? `: ${descricaoLimpa}` : ''}.`,
     tipo: 'chegada',
     lida: false,
     criadaEm: serverTimestamp(),
