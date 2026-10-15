@@ -19,8 +19,14 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Instalar dependências
+      - name: Instalar dependências do app
         run: npm install --no-audit --no-fund
 
       - name: Verificar TypeScript
         run: npm run typecheck
+
+      - name: Instalar dependências das Functions
+        run: npm install --prefix functions --no-audit --no-fund
+
+      - name: Testar push notifications
+        run: npm test --prefix functions
