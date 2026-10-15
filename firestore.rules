@@ -109,6 +109,18 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /ocrLeituras/{id} {
+      allow create: if porteiro()
+        && request.resource.data.porteiroId == request.auth.uid
+        && mesmoCondominio(request.resource.data.condominioId);
+      allow read: if porteiro() && mesmoCondominio(resource.data.condominioId);
+      allow update: if porteiro()
+        && mesmoCondominio(resource.data.condominioId)
+        && request.resource.data.condominioId == resource.data.condominioId
+        && request.resource.data.porteiroId == resource.data.porteiroId;
+      allow delete: if false;
+    }
+
     match /ocrTestes/{id} {
       allow create: if porteiro() && request.resource.data.porteiroId == request.auth.uid && mesmoCondominio(request.resource.data.condominioId);
       allow read: if porteiro() && mesmoCondominio(resource.data.condominioId);
