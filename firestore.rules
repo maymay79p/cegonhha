@@ -4,17 +4,9 @@ service cloud.firestore {
     function logado() { return request.auth != null; }
     function perfil() { return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data; }
     function porteiro() { return logado() && perfil().tipo == 'porteiro'; }
-    function sindico() { return logado() && perfil().tipo == 'sindico'; }
-    function porteiroOuSindico() { return logado() && (perfil().tipo == 'porteiro' || perfil().tipo == 'sindico'); }
     function morador() { return logado() && perfil().tipo == 'morador'; }
     function mesmoCondominio(id) {
-      return logado()
-        && id is string
-        && id.size() > 0
-        && perfil().get('condominioId', '') == id;
-    }
-    function condominioAtualDoRecurso() {
-      return resource.data.get('condominioId', '');
+      return logado() && id is string && id.size() > 0 && perfil().get('condominioId', '') == id;
     }
     function solicitacaoAprovadaPara(novoCondominioId, solicitacaoId) {
       return solicitacaoId is string
@@ -24,22 +16,23 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/solicitacoesCondominio/$(solicitacaoId)).data.condominioId == novoCondominioId
         && get(/databases/$(database)/documents/solicitacoesCondominio/$(solicitacaoId)).data.status == 'aprovada';
     }
+    function banidoNoMural(uid) {
+      return exists(/databases/$(database)/documents/muralBanidos/$(uid))
+        && get(/databases/$(database)/documents/muralBanidos/$(uid)).data.get('ativo', false) == true;
+    }
 
     match /condominios/{condominioId} {
       allow get: if true;
       allow list: if false;
-
       allow create: if logado()
         && request.resource.data.criadoPor == request.auth.uid
         && request.resource.data.codigo == condominioId
         && request.resource.data.nome is string
         && request.resource.data.nome.size() >= 3;
-
       allow update: if logado() && (
         resource.data.criadoPor == request.auth.uid ||
-        (sindico() && mesmoCondominio(condominioId))
+        (porteiro() && mesmoCondominio(condominioId))
       );
-
       allow delete: if false;
     }
 
@@ -49,22 +42,10 @@ service cloud.firestore {
         && request.resource.data.tipo in ['morador', 'porteiro']
         && request.resource.data.condominioId is string
         && (
-          (
-            request.resource.data.tipo == 'morador'
-            && request.resource.data.condominioId == ''
-          ) ||
-          (
-            request.resource.data.tipo == 'porteiro'
-            && request.resource.data.condominioId.size() == 7
-            && existsAfter(/databases/$(database)/documents/condominios/$(request.resource.data.condominioId))
-          )
+          (request.resource.data.tipo == 'morador' && request.resource.data.condominioId == '') ||
+          (request.resource.data.tipo == 'porteiro' && request.resource.data.condominioId.size() == 7 && existsAfter(/databases/$(database)/documents/condominios/$(request.resource.data.condominioId)))
         );
-
-      allow read: if logado() && (
-        request.auth.uid == uid ||
-        mesmoCondominio(resource.data.get('condominioId', ''))
-      );
-
+      allow read: if logado() && (request.auth.uid == uid || mesmoCondominio(resource.data.get('condominioId', '')));
       allow update: if logado()
         && request.auth.uid == uid
         && request.resource.data.tipo == resource.data.tipo
@@ -76,13 +57,9 @@ service cloud.firestore {
             && request.resource.data.condominioId is string
             && request.resource.data.condominioId.size() == 7
             && exists(/databases/$(database)/documents/condominios/$(request.resource.data.condominioId))
-            && solicitacaoAprovadaPara(
-              request.resource.data.condominioId,
-              request.resource.data.get('vinculoSolicitacaoId', '')
-            )
+            && solicitacaoAprovadaPara(request.resource.data.condominioId, request.resource.data.get('vinculoSolicitacaoId', ''))
           )
         );
-
       allow delete: if false;
     }
 
@@ -97,132 +74,82 @@ service cloud.firestore {
         && request.resource.data.condominioId is string
         && request.resource.data.condominioId.size() == 7
         && exists(/databases/$(database)/documents/condominios/$(request.resource.data.condominioId));
-
-      allow read: if logado() && (
-        resource.data.moradorId == request.auth.uid ||
-        mesmoCondominio(resource.data.condominioId)
-      );
-
+      allow read: if logado() && (resource.data.moradorId == request.auth.uid || mesmoCondominio(resource.data.condominioId));
       allow update: if logado() && (
-        (
-          (porteiro() || sindico())
-          && mesmoCondominio(resource.data.condominioId)
-          && resource.data.status == 'pendente'
-          && request.resource.data.status in ['aprovada', 'rejeitada']
-          && request.resource.data.moradorId == resource.data.moradorId
-          && request.resource.data.condominioId == resource.data.condominioId
-        ) ||
-        (
-          morador()
-          && resource.data.moradorId == request.auth.uid
-          && request.resource.data.moradorId == resource.data.moradorId
-          && request.resource.data.condominioId == resource.data.condominioId
-          && (
-            (
-              resource.data.status in ['pendente', 'rejeitada']
-              && request.resource.data.status == 'pendente'
-            ) ||
-            (
-              resource.data.status == 'aprovada'
-              && request.resource.data.status == 'concluida'
-            )
-          )
-        )
+        (porteiro() && mesmoCondominio(resource.data.condominioId) && resource.data.status == 'pendente' && request.resource.data.status in ['aprovada', 'rejeitada'] && request.resource.data.moradorId == resource.data.moradorId && request.resource.data.condominioId == resource.data.condominioId) ||
+        (morador() && resource.data.moradorId == request.auth.uid && request.resource.data.moradorId == resource.data.moradorId && request.resource.data.condominioId == resource.data.condominioId && ((resource.data.status in ['pendente', 'rejeitada'] && request.resource.data.status == 'pendente') || (resource.data.status == 'aprovada' && request.resource.data.status == 'concluida')))
       );
-
       allow delete: if false;
     }
 
     match /encomendas/{id} {
-      allow create: if porteiroOuSindico()
-        && mesmoCondominio(request.resource.data.condominioId)
-        && request.resource.data.porteiroId == request.auth.uid;
-
-      allow update: if porteiroOuSindico()
-        && mesmoCondominio(resource.data.condominioId)
-        && request.resource.data.condominioId == resource.data.condominioId;
-
-      allow delete: if porteiroOuSindico() && mesmoCondominio(resource.data.condominioId);
-
-      allow read: if logado() && (
-        (porteiroOuSindico() && mesmoCondominio(resource.data.condominioId)) ||
-        (morador() && resource.data.moradorId == request.auth.uid)
-      );
+      allow create: if porteiro() && mesmoCondominio(request.resource.data.condominioId) && request.resource.data.porteiroId == request.auth.uid;
+      allow update: if porteiro() && mesmoCondominio(resource.data.condominioId) && request.resource.data.condominioId == resource.data.condominioId;
+      allow delete: if porteiro() && mesmoCondominio(resource.data.condominioId);
+      allow read: if logado() && ((porteiro() && mesmoCondominio(resource.data.condominioId)) || (morador() && resource.data.moradorId == request.auth.uid));
     }
 
     match /fotosEncomendas/{id} {
-      allow create: if porteiroOuSindico()
-        && mesmoCondominio(request.resource.data.condominioId);
-
-      allow read: if logado() && (
-        (porteiroOuSindico() && mesmoCondominio(resource.data.condominioId)) ||
-        (morador() && resource.data.moradorId == request.auth.uid)
-      );
-
+      allow create: if porteiro() && mesmoCondominio(request.resource.data.condominioId);
+      allow read: if logado() && ((porteiro() && mesmoCondominio(resource.data.condominioId)) || (morador() && resource.data.moradorId == request.auth.uid));
       allow update, delete: if false;
     }
 
     match /previsoes/{id} {
-      allow create: if morador()
-        && request.resource.data.moradorId == request.auth.uid
-        && request.resource.data.condominioId == perfil().get('condominioId', '');
-
-      allow read: if logado() && (
-        resource.data.moradorId == request.auth.uid ||
-        ((porteiro() || sindico()) && mesmoCondominio(resource.data.condominioId))
-      );
-
-      allow update: if morador()
-        && resource.data.moradorId == request.auth.uid
-        && request.resource.data.moradorId == resource.data.moradorId
-        && request.resource.data.condominioId == resource.data.condominioId;
-
+      allow create: if morador() && request.resource.data.moradorId == request.auth.uid && request.resource.data.condominioId == perfil().get('condominioId', '');
+      allow read: if logado() && (resource.data.moradorId == request.auth.uid || (porteiro() && mesmoCondominio(resource.data.condominioId)));
+      allow update: if morador() && resource.data.moradorId == request.auth.uid && request.resource.data.moradorId == resource.data.moradorId && request.resource.data.condominioId == resource.data.condominioId;
       allow delete: if morador() && resource.data.moradorId == request.auth.uid;
     }
 
     match /notificacoes/{id} {
-      allow create: if (porteiro() || sindico())
-        && mesmoCondominio(request.resource.data.condominioId);
-
-      allow read: if logado() && (
-        resource.data.moradorId == request.auth.uid ||
-        ((porteiro() || sindico()) && mesmoCondominio(resource.data.condominioId))
-      );
-
-      allow update: if logado()
-        && resource.data.moradorId == request.auth.uid
-        && request.resource.data.moradorId == resource.data.moradorId
-        && request.resource.data.condominioId == resource.data.condominioId;
-
+      allow create: if porteiro() && mesmoCondominio(request.resource.data.condominioId);
+      allow read: if logado() && (resource.data.moradorId == request.auth.uid || (porteiro() && mesmoCondominio(resource.data.condominioId)));
+      allow update: if logado() && resource.data.moradorId == request.auth.uid && request.resource.data.moradorId == resource.data.moradorId && request.resource.data.condominioId == resource.data.condominioId;
       allow delete: if false;
     }
 
     match /ocrTestes/{id} {
-      allow create: if porteiroOuSindico()
-        && request.resource.data.porteiroId == request.auth.uid
-        && mesmoCondominio(request.resource.data.condominioId);
-
-      allow read: if (porteiroOuSindico())
-        && mesmoCondominio(resource.data.condominioId);
-
+      allow create: if porteiro() && request.resource.data.porteiroId == request.auth.uid && mesmoCondominio(request.resource.data.condominioId);
+      allow read: if porteiro() && mesmoCondominio(resource.data.condominioId);
       allow update, delete: if false;
     }
 
     match /auditoria/{id} {
-      allow create: if porteiroOuSindico()
-        && request.resource.data.atorId == request.auth.uid
-        && mesmoCondominio(request.resource.data.condominioId);
-
-      allow read: if logado() && (
-        (porteiroOuSindico() && mesmoCondominio(resource.data.condominioId)) ||
-        (morador() && resource.data.moradorId == request.auth.uid)
-      );
-
+      allow create: if porteiro() && request.resource.data.atorId == request.auth.uid && mesmoCondominio(request.resource.data.condominioId);
+      allow read: if logado() && ((porteiro() && mesmoCondominio(resource.data.condominioId)) || (morador() && resource.data.moradorId == request.auth.uid));
       allow update, delete: if false;
     }
 
+    match /mural/{id} {
+      allow read: if logado() && mesmoCondominio(resource.data.condominioId);
+      allow create: if logado()
+        && mesmoCondominio(request.resource.data.condominioId)
+        && request.resource.data.autorId == request.auth.uid
+        && !banidoNoMural(request.auth.uid)
+        && request.resource.data.texto is string
+        && request.resource.data.texto.size() > 0
+        && request.resource.data.texto.size() <= 1000;
+      allow update: if false;
+      allow delete: if porteiro() && mesmoCondominio(resource.data.condominioId);
+    }
+
+    match /muralDenuncias/{id} {
+      allow create: if logado()
+        && mesmoCondominio(request.resource.data.condominioId)
+        && request.resource.data.denuncianteId == request.auth.uid;
+      allow read, update: if porteiro() && mesmoCondominio(resource.data.condominioId);
+      allow delete: if false;
+    }
+
+    match /muralBanidos/{uid} {
+      allow read: if logado() && mesmoCondominio(resource.data.condominioId);
+      allow create, update: if porteiro() && mesmoCondominio(request.resource.data.condominioId);
+      allow delete: if false;
+    }
+
     match /logsOCR/{id} {
-      allow read: if porteiroOuSindico() && mesmoCondominio(resource.data.condominioId);
+      allow read: if porteiro() && mesmoCondominio(resource.data.condominioId);
       allow write: if false;
     }
   }
