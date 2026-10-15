@@ -280,8 +280,17 @@ service cloud.firestore {
         && request.resource.data.comentarioId is string
         && request.resource.data.comentarioId.size() > 0;
 
-      allow read, update: if porteiro()
-        && mesmoCondominio(resource.data.condominioId);
+      allow read: if logado() && (
+        resource.data.denuncianteId == request.auth.uid ||
+        (porteiro() && mesmoCondominio(resource.data.condominioId))
+      );
+
+      allow update: if porteiro()
+        && mesmoCondominio(resource.data.condominioId)
+        && request.resource.data.condominioId == resource.data.condominioId
+        && request.resource.data.denuncianteId == resource.data.denuncianteId
+        && request.resource.data.autorId == resource.data.autorId
+        && request.resource.data.comentarioId == resource.data.comentarioId;
 
       allow delete: if false;
     }
