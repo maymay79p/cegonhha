@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as Crypto from 'expo-crypto';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
@@ -8,8 +8,11 @@ import { db } from '../firebase';
 
 const INSTALLATION_KEY = '@cegonha/push-installation-id:v1';
 const CHANNEL_ID = 'cegonha-geral';
+const EM_EXPO_GO = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
-if (Platform.OS !== 'web') {
+// O Expo Go serve para testar rapidamente as telas e fluxos JS.
+// Push remoto exige development build; por isso não tentamos configurar o handler no Expo Go.
+if (Platform.OS !== 'web' && !EM_EXPO_GO) {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldPlaySound: true,
@@ -36,7 +39,7 @@ async function obterDocumentoId() {
 
 export type ResultadoRegistroPush =
   | { status: 'registrado'; token: string }
-  | { status: 'sem_permissao' | 'web' | 'sem_project_id' | 'falhou'; erro?: string };
+  | { status: 'sem_permissao' | 'web' | 'expo_go' | 'sem_project_id' | 'falhou'; erro?: string };
 
 export async function registrarDispositivoPush({
   uid,
@@ -48,6 +51,7 @@ export async function registrarDispositivoPush({
   condominioId: string;
 }): Promise<ResultadoRegistroPush> {
   if (Platform.OS === 'web') return { status: 'web' };
+  if (EM_EXPO_GO) return { status: 'expo_go' };
 
   try {
     if (Platform.OS === 'android') {
@@ -89,7 +93,7 @@ export async function registrarDispositivoPush({
 }
 
 export async function desregistrarDispositivoPush() {
-  if (Platform.OS === 'web') return;
+  if (Platform.OS === 'web' || EM_EXPO_GO) return;
   try {
     const installationId = await AsyncStorage.getItem(INSTALLATION_KEY);
     if (!installationId) return;
@@ -98,6 +102,10 @@ export async function desregistrarDispositivoPush() {
   } catch {
     // O logout não deve ser bloqueado se a limpeza do token falhar.
   }
+}
+
+export function executandoNoExpoGo() {
+  return EM_EXPO_GO;
 }
 
 export const PUSH_CHANNEL_ID = CHANNEL_ID;
