@@ -15,9 +15,10 @@ O perfil de síndico não faz mais parte do sistema.
 - registro de encomendas pela portaria;
 - histórico geral da portaria e individual do morador;
 - notificações internas automáticas de chegada, retirada e lembrete;
-- OCR de etiquetas com tentativa de leitura de nome, CPF, bloco e apartamento;
+- OCR de etiquetas com **Google ML Kit**, executado no próprio aparelho, com tentativa de leitura de nome, CPF, bloco e apartamento;
+- cruzamento dos dados lidos na etiqueta com os moradores do condomínio;
 - histórico das leituras OCR da portaria;
-- mural do condomínio com pesquisa, denúncia, banimento e exclusão pela portaria;
+- mural do condomínio em tempo real com nome e data da publicação, exclusão pelo autor, denúncia por outros usuários e moderação pela portaria;
 - localização/endereço do condomínio com abertura no aplicativo de mapas;
 - código do condomínio em tela de destaque com opção de copiar;
 - pesquisa e filtros nas áreas de encomendas;
@@ -25,15 +26,15 @@ O perfil de síndico não faz mais parte do sistema.
 - tema claro, escuro ou conforme o sistema;
 - login por e-mail/senha e opção de autenticação com Google.
 
-## Validação
+## Instalação e validação
 
 ```bash
-npm ci
+npm install
 npm run typecheck
 npm run doctor
 ```
 
-O pull request executa `npm run typecheck` no GitHub Actions.
+O GitHub Actions instala as dependências e executa `npm run typecheck` nas alterações da `main`.
 
 ## Firebase
 
@@ -42,6 +43,27 @@ Depois de alterar `firestore.rules`, publique as regras no projeto Firebase ante
 ```bash
 npm run firebase:rules
 ```
+
+Isso é especialmente importante para o mural, pois as permissões de publicação, denúncia e exclusão são verificadas pelo Firestore.
+
+## OCR com Google ML Kit
+
+O Cegonha usa `@react-native-ml-kit/text-recognition` para reconhecer o texto das etiquetas localmente no Android/iOS. A imagem não precisa ser enviada para um serviço externo de OCR e não existe chave de API de OCR para configurar.
+
+Depois de instalar ou atualizar a dependência nativa, é necessário gerar uma nova build do aplicativo. Para Android:
+
+```bash
+npm install
+eas build --profile development -p android
+```
+
+Depois de instalar a development build no celular, inicie o Metro com:
+
+```bash
+npm run start:dev
+```
+
+O Expo Go não contém o módulo nativo do ML Kit e, por isso, não deve ser usado para testar o OCR.
 
 ## Login com Google
 
@@ -53,23 +75,16 @@ Para ativar a integração no ambiente real:
 2. No projeto Google Cloud/Firebase, crie os Client IDs OAuth necessários para Web, Android e/ou iOS.
 3. Para Android, use o package `com.maymay79p.cegonha` e configure a impressão digital SHA exigida pelo Google.
 4. Para iOS, use o bundle identifier `com.maymay79p.cegonha`.
-5. Copie `.env.example` para `.env` e preencha:
-
-```env
-EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=...
-EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=...
-EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=...
-```
-
-6. Reinicie o Metro limpando o cache:
-
-```bash
-npx expo start -c
-```
+5. Os Client IDs Web e Android atuais já estão definidos no projeto; `.env` pode sobrescrevê-los quando necessário.
+6. Reinicie o Metro limpando o cache após alterações de ambiente.
 
 Em Android/iOS, OAuth não deve ser validado pelo Expo Go. Use uma development build ou uma compilação do aplicativo para que o scheme `cegonha://` possa retornar corretamente ao app.
 
 No primeiro login com Google, se ainda não existir um documento do usuário no Firestore, o Cegonha mantém a sessão autenticada e abre a tela **Concluir cadastro**. O usuário escolhe Morador ou Portaria, informa os campos obrigatórios e o sistema cria o perfil sem solicitar uma nova senha.
+
+## Mural do condomínio
+
+Moradores e portaria vinculados ao mesmo condomínio podem publicar mensagens no mural. Cada publicação registra o ID e o nome do autor, o tipo de perfil e a data/hora. O autor pode excluir a própria publicação; outros usuários podem denunciá-la; e a portaria mantém os recursos de moderação e banimento já existentes.
 
 ## Limites atuais
 
