@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [feat/revisao-completa-cegonha]
+    branches: [main, feat/revisao-completa-cegonha]
 
 jobs:
   typecheck:
