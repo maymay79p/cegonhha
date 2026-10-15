@@ -4,17 +4,24 @@
   "private": true,
   "main": "index.ts",
   "scripts": {
+    "setup": "node scripts/setup.js",
+    "start": "expo start --go --clear --port 19002",
+    "go": "expo start --go --clear --port 19002",
+    "dev": "expo start --dev-client --clear --port 19002",
+    "start:dev": "expo start --dev-client --clear --port 19002",
     "android": "expo start --android --port 19002",
     "ios": "expo start --ios --port 19002",
-    "start": "expo start --clear --port 19002",
-    "start:dev": "expo start --dev-client --clear --port 19002",
     "web": "expo start --web --port 19002",
+    "build:android": "npx eas-cli@latest build --profile development -p android",
+    "build:preview:android": "npx eas-cli@latest build --profile preview -p android",
+    "check": "npm run typecheck && npx expo-doctor@latest",
     "doctor": "npx expo-doctor@latest",
     "typecheck": "tsc --noEmit",
     "firebase:auth": "npx firebase-tools@latest deploy --only auth --project cegonha-43403",
     "firebase:rules": "npx firebase-tools@latest deploy --only firestore:rules --project cegonha-43403",
     "firebase:functions": "npx firebase-tools@latest deploy --only functions --project cegonha-43403",
-    "firebase:deploy": "npx firebase-tools@latest deploy --only firestore:rules,functions --project cegonha-43403"
+    "firebase:deploy": "npm run firebase:rules",
+    "firebase:deploy:push": "npm run firebase:rules && npm run firebase:functions"
   },
   "dependencies": {
     "@expo-google-fonts/eb-garamond": "^0.4.3",
