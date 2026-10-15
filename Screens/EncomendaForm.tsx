@@ -11,6 +11,8 @@ import { EmptyState } from '../components/States';
 import { buscarDuplicada, registrarChegada } from '../services/encomendas';
 import { radius, ThemeColors } from '../theme';
 
+const LIMITE_DESCRICAO = 300;
+
 export default function EncomendaForm({ navigation, route }: any) {
   const { perfil } = useAuth();
   const { colors } = useTheme();
@@ -78,6 +80,7 @@ export default function EncomendaForm({ navigation, route }: any) {
   async function salvar(ignorarDuplicidade = false) {
     if (perfil?.tipo !== 'porteiro') return Alert.alert('Acesso', 'Apenas a portaria pode registrar chegadas.');
     if (!selecionado) return Alert.alert('Atenção', 'Selecione um morador.');
+    if (descricao.trim().length > LIMITE_DESCRICAO) return Alert.alert('Descrição muito longa', `Use no máximo ${LIMITE_DESCRICAO} caracteres.`);
     try {
       setLoading(true);
       if (!ignorarDuplicidade) {
@@ -117,7 +120,7 @@ export default function EncomendaForm({ navigation, route }: any) {
       {previsoes.map(p=><TouchableOpacity key={p.id} style={[styles.forecastItem,previsaoSelecionada?.id===p.id&&styles.forecastActive]} onPress={()=>setPrevisaoSelecionada(previsaoSelecionada?.id===p.id?null:p)}><Ionicons name={previsaoSelecionada?.id===p.id?'radio-button-on':'radio-button-off'} size={19} color={previsaoSelecionada?.id===p.id?colors.success:colors.muted}/><View style={{flex:1}}><Text style={styles.forecastName}>{p.descricao}</Text><Text style={styles.meta}>{p.previsao||p.transportadora||'Previsão cadastrada pelo morador'}</Text></View></TouchableOpacity>)}
     </View>}
 
-    <TextInput style={[styles.input,{marginTop:12}]} placeholder="Descrição opcional da encomenda" value={descricao} onChangeText={setDescricao} returnKeyType="done" onSubmitEditing={()=>salvar()}/>
+    <TextInput style={[styles.input,{marginTop:12}]} placeholder="Descrição opcional da encomenda" value={descricao} onChangeText={setDescricao} returnKeyType="done" onSubmitEditing={()=>salvar()} maxLength={LIMITE_DESCRICAO}/>
     <TouchableOpacity style={[styles.button,loading&&{opacity:.55}]} onPress={()=>salvar()} disabled={loading}><Text style={styles.buttonText}>{loading?'Salvando...':'Confirmar chegada'}</Text><Ionicons name="checkmark" size={19} color="#fff"/></TouchableOpacity>
   </KeyboardScreen>;
 }
