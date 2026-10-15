@@ -10,6 +10,8 @@ import { KeyboardScreen } from '../components/KeyboardScreen';
 import { EmptyState } from '../components/States';
 import { radius, shadow, ThemeColors } from '../theme';
 
+const LIMITE_DESCRICAO = 300;
+
 export default function Previsoes() {
   const { user, perfil } = useAuth();
   const { colors } = useTheme();
@@ -44,11 +46,13 @@ export default function Previsoes() {
   async function salvar() {
     if (!user || !perfil) return;
     if (!perfil.condominioId) return Alert.alert('Condomínio necessário', 'Vincule sua conta a um condomínio antes de cadastrar uma entrega prevista. Assim a portaria também poderá acompanhar o que está a caminho.');
-    if (!descricao.trim()) return Alert.alert('Atenção', 'Informe uma descrição da encomenda.');
+    const descricaoLimpa = descricao.trim();
+    if (!descricaoLimpa) return Alert.alert('Atenção', 'Informe uma descrição da encomenda.');
+    if (descricaoLimpa.length > LIMITE_DESCRICAO) return Alert.alert('Descrição muito longa', `Use no máximo ${LIMITE_DESCRICAO} caracteres.`);
     try {
       setLoading(true);
       const estavaEditando = !!editandoId;
-      const dados = { descricao: descricao.trim(), codigoRastreio: rastreio.trim(), transportadora: transportadora.trim(), previsao: previsao.trim(), atrasada, atualizadoEm: serverTimestamp() };
+      const dados = { descricao: descricaoLimpa, codigoRastreio: rastreio.trim(), transportadora: transportadora.trim(), previsao: previsao.trim(), atrasada, atualizadoEm: serverTimestamp() };
       if (editandoId) {
         await updateDoc(doc(db, 'previsoes', editandoId), dados);
       } else {
@@ -63,7 +67,7 @@ export default function Previsoes() {
           remetenteNome: perfil.nome || user.displayName || 'Morador',
           referenciaId: previsaoRef.id,
           tipo: 'previsao',
-          mensagem: `${perfil.nome || 'Um morador'} informou uma entrega prevista: ${descricao.trim()}${perfil.bloco || perfil.apartamento ? ` · Bloco ${perfil.bloco || '-'} · Ap. ${perfil.apartamento || '-'}` : ''}.`,
+          mensagem: `${perfil.nome || 'Um morador'} informou uma entrega prevista: ${descricaoLimpa}${perfil.bloco || perfil.apartamento ? ` · Bloco ${perfil.bloco || '-'} · Ap. ${perfil.apartamento || '-'}` : ''}.`,
           lidaPor: [],
           criadaEm: serverTimestamp(),
         });
@@ -92,7 +96,7 @@ export default function Previsoes() {
     {!perfil?.condominioId && <View style={styles.warningBox}><Ionicons name="information-circle-outline" size={20} color={colors.warning}/><Text style={styles.warningText}>Vincule seu condomínio no Perfil para cadastrar entregas previstas e compartilhá-las com a portaria.</Text></View>}
     <View style={styles.formCard}>
       {editandoId && <View style={styles.editBanner}><Ionicons name="create-outline" size={18} color={colors.accent}/><Text style={styles.editText}>Editando uma entrega prevista</Text></View>}
-      <TextInput style={styles.input} placeholder="Descrição da encomenda" value={descricao} onChangeText={setDescricao} returnKeyType="next" />
+      <TextInput style={styles.input} placeholder="Descrição da encomenda" value={descricao} onChangeText={setDescricao} returnKeyType="next" maxLength={LIMITE_DESCRICAO} />
       <TextInput style={styles.input} placeholder="Código de rastreio" value={rastreio} onChangeText={setRastreio} returnKeyType="next" />
       <TextInput style={styles.input} placeholder="Transportadora" value={transportadora} onChangeText={setTransportadora} returnKeyType="next" />
       <TextInput style={styles.input} placeholder="Previsão de chegada" value={previsao} onChangeText={setPrevisao} returnKeyType="done" onSubmitEditing={salvar} />
