@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { arrayUnion, collection, doc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../firebase';
@@ -94,22 +94,29 @@ export default function Notificacoes(){
     : 'Chegadas, retiradas, lembretes e decisões da portaria aparecerão aqui automaticamente.';
 
   return <View style={styles.container}>
-    <View style={styles.top}><View><Text style={[styles.eyebrow,{color:ehPortaria?colors.porter:colors.accent}]}>CENTRAL</Text><Text style={styles.title}>Notificações</Text><Text style={styles.subtitle}>{ehPortaria?'Avisos do condomínio para a portaria':'Atualizações da portaria para você'}</Text></View>{naoLidas>0&&<TouchableOpacity onPress={marcarTodas}><Text style={[styles.markAll,{color:ehPortaria?colors.porter:colors.accent}]}>Marcar todas</Text></TouchableOpacity>}</View>
+    <View style={styles.top}><View style={{flex:1}}><Text style={[styles.eyebrow,{color:ehPortaria?colors.porter:colors.accent}]}>CENTRAL</Text><Text style={styles.title}>Notificações</Text><Text style={styles.subtitle}>{ehPortaria?'Avisos do condomínio para a portaria':'Atualizações da portaria para você'}</Text></View>{naoLidas>0&&<TouchableOpacity onPress={marcarTodas}><Text style={[styles.markAll,{color:ehPortaria?colors.porter:colors.accent}]}>Marcar todas</Text></TouchableOpacity>}</View>
     <View style={styles.filters}>
       <TouchableOpacity style={[styles.filter,!soNaoLidas&&styles.active,ehPortaria&&!soNaoLidas&&{backgroundColor:colors.porter,borderColor:colors.porter}]} onPress={()=>setSoNaoLidas(false)}><Text style={[styles.filterText,!soNaoLidas&&styles.activeText]}>Todas</Text></TouchableOpacity>
       <TouchableOpacity style={[styles.filter,soNaoLidas&&styles.active,ehPortaria&&soNaoLidas&&{backgroundColor:colors.porter,borderColor:colors.porter}]} onPress={()=>setSoNaoLidas(true)}><Text style={[styles.filterText,soNaoLidas&&styles.activeText]}>Não lidas · {naoLidas}</Text></TouchableOpacity>
     </View>
-    {loading?<LoadingCards/>:<View>{!exibidos.length?<EmptyState icon="notifications-off-outline" title="Sem avisos" text={vazio}/>:exibidos.map(item=>{
-      const lida=estaLida(item);
-      const destaque=ehPortaria?colors.porter:colors.accent;
-      return <TouchableOpacity key={item.id} style={[styles.card,!lida&&styles.unread,!lida&&ehPortaria&&{borderColor:colors.porter,backgroundColor:colors.porterSoft}]} onPress={()=>!lida&&marcarLida(item)}>
-        <View style={[styles.icon,!lida&&styles.iconUnread]}><Ionicons name={icon(item.tipo) as any} size={21} color={!lida?destaque:colors.muted}/></View>
-        <View style={{flex:1}}><Text style={styles.message}>{item.mensagem}</Text>{!!item.remetenteNome&&ehPortaria&&<Text style={styles.sender}>Enviado por {item.remetenteNome}</Text>}<Text style={styles.date}>{item.criadaEm?.toDate?.().toLocaleString('pt-BR')||''}</Text>{!lida&&<Text style={[styles.hint,{color:destaque}]}>Novo</Text>}</View>
-      </TouchableOpacity>;
-    })}</View>}
+    {loading?<LoadingCards/>:<FlatList
+      data={exibidos}
+      keyExtractor={item=>item.id}
+      contentContainerStyle={styles.list}
+      showsVerticalScrollIndicator={false}
+      ListEmptyComponent={<EmptyState icon="notifications-off-outline" title="Sem avisos" text={vazio}/>} 
+      renderItem={({item})=>{
+        const lida=estaLida(item);
+        const destaque=ehPortaria?colors.porter:colors.accent;
+        return <TouchableOpacity style={[styles.card,!lida&&styles.unread,!lida&&ehPortaria&&{borderColor:colors.porter,backgroundColor:colors.porterSoft}]} onPress={()=>!lida&&marcarLida(item)}>
+          <View style={[styles.icon,!lida&&styles.iconUnread]}><Ionicons name={icon(item.tipo) as any} size={21} color={!lida?destaque:colors.muted}/></View>
+          <View style={{flex:1}}><Text style={styles.message}>{item.mensagem}</Text>{!!item.remetenteNome&&ehPortaria&&<Text style={styles.sender}>Enviado por {item.remetenteNome}</Text>}<Text style={styles.date}>{item.criadaEm?.toDate?.().toLocaleString('pt-BR')||''}</Text>{!lida&&<Text style={[styles.hint,{color:destaque}]}>Novo</Text>}</View>
+        </TouchableOpacity>;
+      }}
+    />}
   </View>;
 }
 
 function makeStyles(colors:ThemeColors){return StyleSheet.create({
-  container:{flex:1,padding:20,paddingBottom:110,backgroundColor:colors.background},top:{flexDirection:'row',justifyContent:'space-between',alignItems:'flex-end',gap:12},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.8},title:{fontSize:34,fontWeight:'700',marginTop:3},subtitle:{fontSize:13,color:colors.muted,marginTop:2},markAll:{fontSize:14,fontWeight:'700',marginBottom:5},filters:{flexDirection:'row',gap:7,marginVertical:13},filter:{paddingHorizontal:14,paddingVertical:8,borderRadius:radius.pill,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},active:{backgroundColor:colors.accent,borderColor:colors.accent},filterText:{fontSize:14},activeText:{color:'#fff',fontWeight:'700'},card:{flexDirection:'row',gap:12,backgroundColor:colors.surface,padding:15,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,marginBottom:9},unread:{borderColor:colors.accent,backgroundColor:colors.accentSoft},icon:{width:42,height:42,borderRadius:21,backgroundColor:colors.surfaceSoft,alignItems:'center',justifyContent:'center'},iconUnread:{backgroundColor:colors.accentSoft},message:{fontSize:16,lineHeight:21},sender:{fontSize:12,color:colors.muted,marginTop:5,fontWeight:'600'},date:{fontSize:12,color:colors.muted,marginTop:4},hint:{fontSize:12,fontWeight:'700',marginTop:4}
+  container:{flex:1,padding:20,paddingBottom:100,backgroundColor:colors.background},top:{flexDirection:'row',justifyContent:'space-between',alignItems:'flex-end',gap:12},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.8},title:{fontSize:34,fontWeight:'700',marginTop:3},subtitle:{fontSize:13,color:colors.muted,marginTop:2},markAll:{fontSize:14,fontWeight:'700',marginBottom:5},filters:{flexDirection:'row',gap:7,marginVertical:13},filter:{paddingHorizontal:14,paddingVertical:8,borderRadius:radius.pill,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},active:{backgroundColor:colors.accent,borderColor:colors.accent},filterText:{fontSize:14},activeText:{color:'#fff',fontWeight:'700'},list:{paddingBottom:120,flexGrow:1},card:{flexDirection:'row',gap:12,backgroundColor:colors.surface,padding:15,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,marginBottom:9},unread:{borderColor:colors.accent,backgroundColor:colors.accentSoft},icon:{width:42,height:42,borderRadius:21,backgroundColor:colors.surfaceSoft,alignItems:'center',justifyContent:'center'},iconUnread:{backgroundColor:colors.accentSoft},message:{fontSize:16,lineHeight:21},sender:{fontSize:12,color:colors.muted,marginTop:5,fontWeight:'600'},date:{fontSize:12,color:colors.muted,marginTop:4},hint:{fontSize:12,fontWeight:'700',marginTop:4}
 });}
