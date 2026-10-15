@@ -33,15 +33,7 @@ export async function buscarDuplicada(moradorId: string) {
     }) || null;
 }
 
-export async function registrarChegada({
-  perfil,
-  morador,
-  descricao,
-  textoOCR,
-  fotoEtiqueta,
-  ocrMeta,
-  previsao,
-}: {
+export async function registrarChegada({ perfil, morador, descricao, textoOCR, fotoEtiqueta, ocrMeta, previsao }: {
   perfil: any;
   morador: any;
   descricao: string;
@@ -52,10 +44,8 @@ export async function registrarChegada({
 }) {
   const uidAtual = auth.currentUser?.uid || perfil?.id || '';
   const condominioAtual = perfil?.condominioId || '';
-
-  if (!uidAtual || !condominioAtual) {
-    throw new Error('Sua conta de portaria está sem condomínio vinculado. Faça logout e login novamente.');
-  }
+  if (!uidAtual || !condominioAtual) throw new Error('Sua conta de portaria está sem condomínio vinculado. Faça logout e login novamente.');
+  if (perfil?.tipo !== 'porteiro') throw new Error('Apenas a portaria pode registrar encomendas.');
 
   const encomendaRef = doc(collection(db, 'encomendas'));
   const notificacaoRef = doc(collection(db, 'notificacoes'));
@@ -64,14 +54,7 @@ export async function registrarChegada({
 
   const historico: HistoricoEvento[] = [];
   if (previsao) {
-    historico.push({
-      tipo:'prevista',
-      titulo:'Prevista pelo morador',
-      data:previsao.criadaEm?.toDate?.()?.toISOString?.() || agoraISO(),
-      atorId:morador.id,
-      atorNome:morador.nome,
-      observacao:previsao.descricao || '',
-    });
+    historico.push({ tipo:'prevista', titulo:'Prevista pelo morador', data:previsao.criadaEm?.toDate?.()?.toISOString?.() || agoraISO(), atorId:morador.id, atorNome:morador.nome, observacao:previsao.descricao || '' });
   }
   historico.push(evento('recebida', 'Recebida pela portaria', uidAtual, perfil.nome));
   historico.push(evento('pendente', 'Aguardando retirada', uidAtual, perfil.nome));
@@ -101,7 +84,7 @@ export async function registrarChegada({
     moradorId: morador.id,
     condominioId: condominioAtual,
     encomendaId: encomendaRef.id,
-    mensagem: 'Sua encomenda chegou à portaria e está aguardando retirada.',
+    mensagem: `Sua encomenda chegou à portaria${descricao.trim() ? `: ${descricao.trim()}` : ''}.`,
     tipo: 'chegada',
     lida: false,
     criadaEm: serverTimestamp(),
@@ -132,6 +115,7 @@ export async function registrarChegada({
     batch.set(testeRef, {
       condominioId: condominioAtual,
       porteiroId: uidAtual,
+      porteiroNome: perfil.nome || '',
       encomendaId: encomendaRef.id,
       tipoTexto: ocrMeta.tipoTexto,
       iluminacao: ocrMeta.iluminacao,
@@ -139,12 +123,29 @@ export async function registrarChegada({
       topCandidatoId: ocrMeta.topCandidatoId || '',
       topScore: ocrMeta.topScore || 0,
       moradorConfirmadoId: morador.id,
+      moradorConfirmadoNome: morador.nome || '',
       acertoTop1: !!ocrMeta.topCandidatoId && ocrMeta.topCandidatoId === morador.id,
+      nomeDetectado: ocrMeta.nomeDetectado || '',
+      cpfDetectado: ocrMeta.cpfDetectado || '',
+      blocoDetectado: ocrMeta.blocoDetectado || '',
+      apartamentoDetectado: ocrMeta.apartamentoDetectado || '',
+      textoOCR: ocrMeta.textoOCR || textoOCR || '',
       reconheceuNome: ocrMeta.reconheceuNome,
+      reconheceuCpf: ocrMeta.reconheceuCpf,
       reconheceuBloco: ocrMeta.reconheceuBloco,
       reconheceuApartamento: ocrMeta.reconheceuApartamento,
       criadoEm: serverTimestamp(),
     });
+
+    if (ocrMeta.leituraId) {
+      batch.update(doc(db, 'ocrLeituras', ocrMeta.leituraId), {
+        confirmado: true,
+        encomendaId: encomendaRef.id,
+        moradorConfirmadoId: morador.id,
+        moradorConfirmadoNome: morador.nome || '',
+        confirmadoEm: serverTimestamp(),
+      });
+    }
   }
 
   await batch.commit();
@@ -152,33 +153,12 @@ export async function registrarChegada({
 }
 
 export async function registrarRetirada(encomenda: Encomenda, perfil: any) {
+  if (perfil?.tipo !== 'porteiro') throw new Error('Apenas a portaria pode registrar retiradas.');
   const ev = evento('retirada', 'Retirada registrada', perfil.id, perfil.nome);
   await Promise.all([
-    updateDoc(doc(db, 'encomendas', encomenda.id), {
-      status: 'retirada',
-      retiradaEm: serverTimestamp(),
-      retiradaPorId: perfil.id,
-      retiradaPorNome: perfil.nome,
-      historico: arrayUnion(ev),
-    }),
-    addDoc(collection(db, 'notificacoes'), {
-      moradorId: encomenda.moradorId,
-      condominioId: encomenda.condominioId,
-      encomendaId: encomenda.id,
-      mensagem: 'A retirada da sua encomenda foi registrada pela portaria.',
-      tipo: 'retirada',
-      lida: false,
-      criadaEm: serverTimestamp(),
-    }),
-    addDoc(collection(db, 'auditoria'), {
-      encomendaId: encomenda.id,
-      condominioId: encomenda.condominioId,
-      moradorId: encomenda.moradorId,
-      atorId: perfil.id,
-      atorNome: perfil.nome,
-      acao: 'retirada_registrada',
-      criadoEm: serverTimestamp(),
-    }),
+    updateDoc(doc(db, 'encomendas', encomenda.id), { status: 'retirada', retiradaEm: serverTimestamp(), retiradaPorId: perfil.id, retiradaPorNome: perfil.nome, historico: arrayUnion(ev) }),
+    addDoc(collection(db, 'notificacoes'), { moradorId: encomenda.moradorId, condominioId: encomenda.condominioId, encomendaId: encomenda.id, mensagem: 'A retirada da sua encomenda foi registrada pela portaria.', tipo: 'retirada', lida: false, criadaEm: serverTimestamp() }),
+    addDoc(collection(db, 'auditoria'), { encomendaId: encomenda.id, condominioId: encomenda.condominioId, moradorId: encomenda.moradorId, atorId: perfil.id, atorNome: perfil.nome, acao: 'retirada_registrada', criadoEm: serverTimestamp() }),
   ]);
 }
 
@@ -186,27 +166,8 @@ export async function enviarLembreteAtrasado(encomenda: Encomenda, perfil: any) 
   if (encomenda.lembrete3dEnviado || encomenda.status !== 'pendente') return;
   const ev = evento('lembrete', 'Lembrete de retirada enviado', perfil.id, perfil.nome);
   await Promise.all([
-    updateDoc(doc(db, 'encomendas', encomenda.id), {
-      lembrete3dEnviado: true,
-      historico: arrayUnion(ev),
-    }),
-    addDoc(collection(db, 'notificacoes'), {
-      moradorId: encomenda.moradorId,
-      condominioId: encomenda.condominioId,
-      encomendaId: encomenda.id,
-      mensagem: 'Sua encomenda está há mais de 3 dias aguardando retirada na portaria.',
-      tipo: 'lembrete',
-      lida: false,
-      criadaEm: serverTimestamp(),
-    }),
-    addDoc(collection(db, 'auditoria'), {
-      encomendaId: encomenda.id,
-      condominioId: encomenda.condominioId,
-      moradorId: encomenda.moradorId,
-      atorId: perfil.id,
-      atorNome: perfil.nome,
-      acao: 'lembrete_3_dias',
-      criadoEm: serverTimestamp(),
-    }),
+    updateDoc(doc(db, 'encomendas', encomenda.id), { lembrete3dEnviado: true, historico: arrayUnion(ev) }),
+    addDoc(collection(db, 'notificacoes'), { moradorId: encomenda.moradorId, condominioId: encomenda.condominioId, encomendaId: encomenda.id, mensagem: 'Sua encomenda está há mais de 3 dias aguardando retirada na portaria.', tipo: 'lembrete', lida: false, criadaEm: serverTimestamp() }),
+    addDoc(collection(db, 'auditoria'), { encomendaId: encomenda.id, condominioId: encomenda.condominioId, moradorId: encomenda.moradorId, atorId: perfil.id, atorNome: perfil.nome, acao: 'lembrete_3_dias', criadoEm: serverTimestamp() }),
   ]);
 }

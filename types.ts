@@ -1,6 +1,6 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-export type TipoUsuario = 'morador' | 'porteiro' | 'sindico';
+export type TipoUsuario = 'morador' | 'porteiro';
 export type StatusEncomenda = 'prevista' | 'recebida' | 'pendente' | 'retirada';
 
 export type Morador = {
@@ -67,21 +67,36 @@ export type CandidatoOCR = Morador & { score: number };
 export type ResultadoOCR = {
   texto: string;
   nome?: string | null;
+  cpf?: string | null;
   bloco?: string | null;
   apartamento?: string | null;
   candidatos: CandidatoOCR[];
   tempoMs?: number;
+  leituraId?: string;
 };
 
 export type OCRMeta = {
+  leituraId?: string;
   tipoTexto: 'impresso' | 'manuscrito';
   iluminacao: 'boa' | 'media' | 'ruim';
   tempoMs: number;
   topCandidatoId?: string;
   topScore?: number;
+  nomeDetectado?: string;
+  cpfDetectado?: string;
+  blocoDetectado?: string;
+  apartamentoDetectado?: string;
+  textoOCR?: string;
   reconheceuNome: boolean;
+  reconheceuCpf: boolean;
   reconheceuBloco: boolean;
   reconheceuApartamento: boolean;
+};
+
+export type CondominioLocalizacao = {
+  endereco?: string;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 export type RootStackParamList = {
@@ -90,6 +105,7 @@ export type RootStackParamList = {
   RecuperaSenha: undefined;
   Home: undefined;
   OCR: undefined;
+  OCRHistorico: undefined;
   EncomendaForm: {
     candidato?: CandidatoOCR;
     textoOCR?: string;
@@ -103,6 +119,9 @@ export type RootStackParamList = {
   Previsoes: undefined;
   SolicitacoesCondominio: undefined;
   Privacidade: undefined;
+  Mural: undefined;
+  Condominio: undefined;
+  CodigoCondominio: undefined;
 };
 
 export type NavigationProps = NativeStackNavigationProp<RootStackParamList>;
