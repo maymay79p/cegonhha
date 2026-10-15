@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, where, writeBatch } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -113,23 +113,40 @@ export default function Mural({ navigation }: any) {
     }
     try {
       setEnviandoDenuncia(true);
-      await addDoc(collection(db, 'muralDenuncias'), {
+      const denunciaRef = doc(collection(db, 'muralDenuncias'));
+      const notificacaoRef = doc(collection(db, 'notificacoes'));
+      const denuncianteNome = perfil.nome || user.displayName || 'Usuário';
+      const batch = writeBatch(db);
+      batch.set(denunciaRef, {
         condominioId: perfil.condominioId,
         comentarioId: denunciaItem.id,
         comentarioTexto: denunciaItem.texto || '',
         autorId: denunciaItem.autorId,
         autorNome: denunciaItem.autorNome || '',
+        autorTipo: denunciaItem.autorTipo || '',
         denuncianteId: user.uid,
-        denuncianteNome: perfil.nome || user.displayName || '',
+        denuncianteNome,
         motivo: motivoDenuncia,
         detalhes: detalhesDenuncia.trim(),
         criadoEm: serverTimestamp(),
         status: 'pendente',
       });
+      batch.set(notificacaoRef, {
+        destinatarioTipo: 'porteiro',
+        condominioId: perfil.condominioId,
+        remetenteId: user.uid,
+        remetenteNome: denuncianteNome,
+        referenciaId: denunciaRef.id,
+        tipo: 'denuncia',
+        mensagem: `${denuncianteNome} denunciou uma publicação de ${denunciaItem.autorNome || 'um usuário'} · ${motivoDenuncia}.`,
+        lidaPor: [],
+        criadaEm: serverTimestamp(),
+      });
+      await batch.commit();
       setDenunciaItem(null);
       setMotivoDenuncia('');
       setDetalhesDenuncia('');
-      Alert.alert('Denúncia enviada', 'A denúncia foi registrada e já pode ser acompanhada na Central de denúncias.');
+      Alert.alert('Denúncia enviada', 'A denúncia foi registrada, a portaria foi avisada e você pode acompanhar o andamento na Central de denúncias.');
     } catch (e:any) {
       Alert.alert('Mural', mensagemErro(e, 'Não foi possível enviar a denúncia.'));
     } finally {
@@ -203,8 +220,8 @@ export default function Mural({ navigation }: any) {
         <Ionicons name={enviando ? 'hourglass-outline' : 'send'} size={18} color="#fff"/>
       </TouchableOpacity>
     </View>
-    <View style={styles.moderationHint}><Ionicons name="shield-checkmark-outline" size={15} color={colors.muted}/><Text style={styles.moderationText}>Mensagens com palavrões, ofensas ou linguagem imprópria são bloqueadas antes da publicação.</Text></View>
 
+    <Text style={styles.communityRule}>Respeite a comunidade: linguagem ofensiva ou imprópria é bloqueada antes da publicação.</Text>
     {banido&&<View style={styles.banned}><Ionicons name="ban-outline" size={18} color={colors.danger}/><Text style={styles.bannedText}>Sua conta pode ler o mural, mas não pode publicar novas mensagens.</Text></View>}
 
     <FlatList
@@ -253,5 +270,5 @@ export default function Mural({ navigation }: any) {
 }
 
 function makeStyles(colors:ThemeColors){return StyleSheet.create({
-  container:{flex:1,padding:20,paddingBottom:110,backgroundColor:colors.background},headingRow:{flexDirection:'row',alignItems:'flex-start',gap:10},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.8,color:colors.accent},title:{fontSize:34,fontWeight:'700',marginTop:3},subtitle:{fontSize:15,color:colors.muted,marginBottom:12},reportCenter:{alignItems:'center',justifyContent:'center',gap:3,minWidth:74,minHeight:54,paddingHorizontal:9,borderRadius:radius.medium,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},reportCenterText:{fontSize:11,fontWeight:'700',color:colors.warning},search:{height:48,borderRadius:radius.pill,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,flexDirection:'row',alignItems:'center',paddingHorizontal:14},searchInput:{flex:1,paddingHorizontal:8},compose:{flexDirection:'row',gap:8,alignItems:'flex-end',marginTop:12,marginBottom:6},input:{flex:1,minHeight:50,maxHeight:110,backgroundColor:colors.surface,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,padding:12},send:{width:48,height:48,borderRadius:24,backgroundColor:colors.accent,alignItems:'center',justifyContent:'center'},moderationHint:{flexDirection:'row',alignItems:'flex-start',gap:6,marginBottom:10,paddingHorizontal:2},moderationText:{flex:1,fontSize:12,lineHeight:17,color:colors.muted},banned:{flexDirection:'row',gap:8,alignItems:'center',backgroundColor:colors.surfaceSoft,borderRadius:radius.medium,padding:12,marginBottom:10},bannedText:{flex:1,fontSize:14,color:colors.danger},card:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,padding:15,marginBottom:9},top:{flexDirection:'row',justifyContent:'space-between',gap:10},name:{fontSize:17,fontWeight:'700'},role:{fontSize:12,color:colors.muted,marginTop:2},body:{fontSize:16,lineHeight:22,marginTop:10},actions:{flexDirection:'row',gap:12,marginTop:12},action:{flexDirection:'row',alignItems:'center',gap:5},actionText:{fontSize:13,fontWeight:'700',color:colors.warning},modalBackdrop:{flex:1,backgroundColor:'rgba(0,0,0,0.45)',alignItems:'center',justifyContent:'center',padding:20},modalCard:{width:'100%',maxWidth:520,backgroundColor:colors.surface,borderRadius:radius.large,padding:18,borderWidth:1,borderColor:colors.border},modalTop:{flexDirection:'row',gap:10},modalTitle:{fontSize:23,fontWeight:'700'},modalHelp:{fontSize:14,lineHeight:19,color:colors.muted,marginTop:3},reasonList:{marginTop:13,gap:7},reason:{flexDirection:'row',alignItems:'center',gap:8,minHeight:44,paddingHorizontal:12,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,backgroundColor:colors.background},reasonActive:{borderColor:colors.accent,backgroundColor:colors.accentSoft},reasonText:{fontSize:15,fontWeight:'700'},detailsInput:{minHeight:76,maxHeight:110,backgroundColor:colors.background,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,padding:11,marginTop:11,textAlignVertical:'top'},reportButton:{height:48,borderRadius:radius.pill,backgroundColor:colors.warning,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7,marginTop:12},reportButtonText:{color:'#fff',fontSize:15,fontWeight:'700'}
+  container:{flex:1,padding:20,paddingBottom:110,backgroundColor:colors.background},headingRow:{flexDirection:'row',alignItems:'flex-start',gap:10},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.8,color:colors.accent},title:{fontSize:34,fontWeight:'700',marginTop:3},subtitle:{fontSize:15,color:colors.muted,marginBottom:12},reportCenter:{alignItems:'center',justifyContent:'center',gap:3,minWidth:74,minHeight:54,paddingHorizontal:9,borderRadius:radius.medium,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},reportCenterText:{fontSize:11,fontWeight:'700',color:colors.warning},search:{height:48,borderRadius:radius.pill,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,flexDirection:'row',alignItems:'center',paddingHorizontal:14},searchInput:{flex:1,paddingHorizontal:8},compose:{flexDirection:'row',gap:8,alignItems:'flex-end',marginVertical:12},input:{flex:1,minHeight:50,maxHeight:110,backgroundColor:colors.surface,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,padding:12},send:{width:48,height:48,borderRadius:24,backgroundColor:colors.accent,alignItems:'center',justifyContent:'center'},communityRule:{fontSize:12,color:colors.muted,lineHeight:17,marginTop:-4,marginBottom:10},banned:{flexDirection:'row',gap:8,alignItems:'center',backgroundColor:colors.surfaceSoft,borderRadius:radius.medium,padding:12,marginBottom:10},bannedText:{flex:1,fontSize:14,color:colors.danger},card:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,padding:15,marginBottom:9},top:{flexDirection:'row',justifyContent:'space-between',gap:10},name:{fontSize:17,fontWeight:'700'},role:{fontSize:12,color:colors.muted,marginTop:2},body:{fontSize:16,lineHeight:22,marginTop:10},actions:{flexDirection:'row',gap:12,marginTop:12},action:{flexDirection:'row',alignItems:'center',gap:5},actionText:{fontSize:13,fontWeight:'700',color:colors.warning},modalBackdrop:{flex:1,backgroundColor:'rgba(0,0,0,0.45)',alignItems:'center',justifyContent:'center',padding:20},modalCard:{width:'100%',maxWidth:520,backgroundColor:colors.surface,borderRadius:radius.large,padding:18,borderWidth:1,borderColor:colors.border},modalTop:{flexDirection:'row',gap:10},modalTitle:{fontSize:23,fontWeight:'700'},modalHelp:{fontSize:14,lineHeight:19,color:colors.muted,marginTop:3},reasonList:{marginTop:13,gap:7},reason:{flexDirection:'row',alignItems:'center',gap:8,minHeight:44,paddingHorizontal:12,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,backgroundColor:colors.background},reasonActive:{borderColor:colors.accent,backgroundColor:colors.accentSoft},reasonText:{fontSize:15,fontWeight:'700'},detailsInput:{minHeight:76,maxHeight:110,backgroundColor:colors.background,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,padding:11,marginTop:11,textAlignVertical:'top'},reportButton:{height:48,borderRadius:radius.pill,backgroundColor:colors.warning,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7,marginTop:12},reportButtonText:{color:'#fff',fontSize:15,fontWeight:'700'}
 });}
