@@ -8,6 +8,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '../context/ThemeContext';
 
 type Props = {
   children: React.ReactNode;
@@ -22,25 +23,26 @@ export function KeyboardScreen({
   scrollProps,
   keyboardVerticalOffset = 8,
 }: Props) {
+  const { colors } = useTheme();
   return (
-    <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={keyboardVerticalOffset}
-    >
-      <ScrollView
-        {...scrollProps}
-        style={[{ flex: 1 }, scrollProps?.style]}
-        contentContainerStyle={[{ flexGrow: 1 }, contentContainerStyle]}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-        contentInsetAdjustmentBehavior="automatic"
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: colors.background }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={keyboardVerticalOffset}
       >
-        {children}
-      </ScrollView>
-    </KeyboardAvoidingView>
+        <ScrollView
+          {...scrollProps}
+          style={[{ flex: 1, backgroundColor: colors.background }, scrollProps?.style]}
+          contentContainerStyle={[{ flexGrow: 1, backgroundColor: colors.background }, contentContainerStyle]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          contentInsetAdjustmentBehavior="automatic"
+        >
+          {children}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
