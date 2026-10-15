@@ -8,7 +8,7 @@ export type PerfilUsuario = {
   id: string;
   nome: string;
   email: string;
-  tipo: 'morador' | 'porteiro' | 'sindico';
+  tipo: 'morador' | 'porteiro';
   condominioId: string;
   condominioNome?: string;
   condominioCodigo?: string;
@@ -17,6 +17,7 @@ export type PerfilUsuario = {
   telefone?: string;
   cpf?: string;
   fotoPerfil?: string;
+  mostrarCodigoCondominio?: boolean;
 };
 
 type AuthContextType = {
