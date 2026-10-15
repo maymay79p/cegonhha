@@ -115,6 +115,7 @@ export type RootStackParamList = {
   } | undefined;
   Detalhes: { encomenda: Encomenda };
   Relatorios: undefined;
+  Denuncias: undefined;
   Notificacoes: undefined;
   Perfil: undefined;
   Previsoes: undefined;
