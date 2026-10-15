@@ -56,6 +56,7 @@ const porteiroIcons: Record<string, { on: string; off: string }> = {
   Encomendas: { on: 'cube', off: 'cube-outline' },
   OCR: { on: 'scan', off: 'scan-outline' },
   Mural: { on: 'chatbubbles', off: 'chatbubbles-outline' },
+  Notificacoes: { on: 'notifications', off: 'notifications-outline' },
   Perfil: { on: 'person', off: 'person-outline' },
 };
 
@@ -124,13 +125,14 @@ function PorteiroTabs() {
       tabBarActiveTintColor: colors.porter,
       tabBarInactiveTintColor: colors.muted,
       tabBarStyle: tabBarStyle(insets.bottom, colors),
-      tabBarLabelStyle: { fontFamily: fonts.semiBold, fontSize: 11, marginTop: -2 },
+      tabBarLabelStyle: { fontFamily: fonts.semiBold, fontSize: 10, marginTop: -2 },
       tabBarItemStyle: { borderRadius: 24 },
     })}>
       <PorteiroTab.Screen name="Painel" component={PorteiroHome} options={{ title: 'Painel' }} />
       <PorteiroTab.Screen name="Encomendas" component={PorteiroEncomendas} options={{ title: 'Entregas' }} />
       <PorteiroTab.Screen name="OCR" component={OCR} options={{ title: 'Leitura' }} />
       <PorteiroTab.Screen name="Mural" component={Mural} options={{ title: 'Mural' }} />
+      <PorteiroTab.Screen name="Notificacoes" component={Notificacoes} options={{ title: 'Avisos' }} />
       <PorteiroTab.Screen name="Perfil" component={Perfil} options={{ title: 'Perfil' }} />
     </PorteiroTab.Navigator>
   );
