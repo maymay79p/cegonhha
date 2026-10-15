@@ -21,8 +21,13 @@ function evento(tipo: HistoricoEvento['tipo'], titulo: string, atorId?: string, 
   return { tipo, titulo, data: agoraISO(), atorId, atorNome, observacao };
 }
 
-export async function buscarDuplicada(moradorId: string) {
-  const snap = await getDocs(query(collection(db, 'encomendas'), where('moradorId', '==', moradorId)));
+export async function buscarDuplicada(moradorId: string, condominioId: string) {
+  if (!condominioId) return null;
+  const snap = await getDocs(query(
+    collection(db, 'encomendas'),
+    where('moradorId', '==', moradorId),
+    where('condominioId', '==', condominioId),
+  ));
   const limite = Date.now() - 10 * 60 * 1000;
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() } as any))
