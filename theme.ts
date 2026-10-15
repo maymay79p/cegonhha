@@ -1,4 +1,4 @@
-export const colors = {
+export const lightColors = {
   background: '#F8F5F0',
   surface: '#FFFFFF',
   surfaceSoft: '#F1ECE6',
@@ -14,6 +14,28 @@ export const colors = {
   danger: '#A34747',
   info: '#4B647B',
 };
+
+export const darkColors: typeof lightColors = {
+  background: '#12100F',
+  surface: '#1B1817',
+  surfaceSoft: '#25201E',
+  text: '#F5F0EB',
+  muted: '#B7AEA7',
+  border: '#3A312D',
+  accent: '#E58CAA',
+  accentSoft: '#3A2029',
+  porter: '#9D6F82',
+  porterSoft: '#32262B',
+  success: '#82B596',
+  warning: '#D8A16F',
+  danger: '#E68484',
+  info: '#87A9C7',
+};
+
+export type ThemeColors = typeof lightColors;
+
+// Mantido para compatibilidade com telas ainda não migradas para o contexto de tema.
+export const colors = lightColors;
 
 export const fonts = {
   brand: 'EBGaramond_700Bold',
