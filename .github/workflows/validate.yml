@@ -25,6 +25,9 @@ jobs:
       - name: Verificar TypeScript
         run: npm run typecheck
 
+      - name: Validar bundle do Expo Go
+        run: npm run check:expo-go
+
       - name: Instalar dependências das Functions
         run: npm install --prefix functions --no-audit --no-fund
 
