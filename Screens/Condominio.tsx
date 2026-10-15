@@ -21,7 +21,7 @@ export default function Condominio({ navigation }: any) {
   useEffect(() => {
     if (!perfil?.condominioId) return;
     return onSnapshot(doc(db, 'condominios', perfil.condominioId), snap => {
-      const valor = snap.exists() ? { id:snap.id, ...snap.data() } : null;
+      const valor:any = snap.exists() ? { id:snap.id, ...snap.data() } : null;
       setDados(valor);
       setEndereco(String(valor?.endereco || ''));
     });
