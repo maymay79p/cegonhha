@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as Crypto from 'expo-crypto';
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { deleteDoc, doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -9,10 +8,15 @@ import { db } from '../firebase';
 const INSTALLATION_KEY = '@cegonha/push-installation-id:v1';
 const CHANNEL_ID = 'cegonha-geral';
 const EM_EXPO_GO = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+let handlerConfigurado = false;
 
-// O Expo Go serve para testar rapidamente as telas e fluxos JS.
-// Push remoto exige development build; por isso não tentamos configurar o handler no Expo Go.
-if (Platform.OS !== 'web' && !EM_EXPO_GO) {
+async function carregarNotifications() {
+  return import('expo-notifications');
+}
+
+async function configurarHandlerSeNecessario() {
+  if (handlerConfigurado || Platform.OS === 'web' || EM_EXPO_GO) return;
+  const Notifications = await carregarNotifications();
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldPlaySound: true,
@@ -21,6 +25,7 @@ if (Platform.OS !== 'web' && !EM_EXPO_GO) {
       shouldShowList: true,
     }),
   });
+  handlerConfigurado = true;
 }
 
 async function obterInstallationId() {
@@ -54,6 +59,9 @@ export async function registrarDispositivoPush({
   if (EM_EXPO_GO) return { status: 'expo_go' };
 
   try {
+    const Notifications = await carregarNotifications();
+    await configurarHandlerSeNecessario();
+
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
         name: 'Avisos do Cegonha',
