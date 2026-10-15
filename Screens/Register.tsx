@@ -1,13 +1,15 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { createUserWithEmailAndPassword, deleteUser, User } from 'firebase/auth';
+import { createUserWithEmailAndPassword, deleteUser, signOut, User } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { buscarCondominioPorCodigo, Condominio, prepararNovoCondominio } from '../services/condominios';
 import { solicitarVinculoPorCodigo } from '../services/vinculo';
 import { PerfilUsuario, useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { GOOGLE_ROLE_STORAGE_KEY } from '../components/GoogleSignInButton';
 import { AppText as Text, AppTextInput as TextInput } from '../components/AppText';
 import { KeyboardScreen } from '../components/KeyboardScreen';
 import { radius, shadow, ThemeColors } from '../theme';
@@ -16,6 +18,10 @@ export default function Register({ route, navigation }: any) {
   const { aplicarPerfilLocal } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const usuarioAutenticado = auth.currentUser;
+  const cadastroAutenticado = !!usuarioAutenticado;
+  const contaGoogle = !!usuarioAutenticado?.providerData?.some(p => p.providerId === 'google.com');
+
   const [tipo, setTipo] = useState<'morador' | 'porteiro'>(route?.params?.tipoInicial || 'morador');
   const [modoPorteiro, setModoPorteiro] = useState<'criar' | 'entrar'>('criar');
   const [nome, setNome] = useState('');
@@ -30,6 +36,15 @@ export default function Register({ route, navigation }: any) {
   const [telefone, setTelefone] = useState('');
   const [loading, setLoading] = useState(false);
   const [verificando, setVerificando] = useState(false);
+
+  useEffect(() => {
+    if (!usuarioAutenticado) return;
+    setNome(v => v || usuarioAutenticado.displayName || '');
+    setEmail(v => v || usuarioAutenticado.email || '');
+    AsyncStorage.getItem(GOOGLE_ROLE_STORAGE_KEY).then(valor => {
+      if (valor === 'morador' || valor === 'porteiro') setTipo(valor);
+    }).catch(() => {});
+  }, [usuarioAutenticado?.uid]);
 
   const precisaCodigoPorteiro = tipo === 'porteiro' && modoPorteiro === 'entrar';
   const temCodigoMorador = tipo === 'morador' && !!codigoCondominio.trim();
@@ -54,8 +69,8 @@ export default function Register({ route, navigation }: any) {
 
   function validarDadosBase() {
     if (!nome.trim()) return Alert.alert('Atenção', 'Informe seu nome completo.'), false;
-    if (!email.trim() || !senha) return Alert.alert('Atenção', 'Informe e-mail e senha.'), false;
-    if (senha.length < 6) return Alert.alert('Senha', 'A senha deve ter pelo menos 6 caracteres.'), false;
+    if (!cadastroAutenticado && (!email.trim() || !senha)) return Alert.alert('Atenção', 'Informe e-mail e senha.'), false;
+    if (!cadastroAutenticado && senha.length < 6) return Alert.alert('Senha', 'A senha deve ter pelo menos 6 caracteres.'), false;
     const cpfDigitos = cpf.replace(/\D/g, '');
     if (cpfDigitos && cpfDigitos.length !== 11) return Alert.alert('CPF', 'Informe os 11 dígitos do CPF ou deixe o campo vazio.'), false;
     if (tipo === 'morador' && (!bloco.trim() || !apartamento.trim())) return Alert.alert('Atenção', 'Informe bloco e apartamento.'), false;
@@ -138,30 +153,47 @@ export default function Register({ route, navigation }: any) {
     return { perfil:perfilCriado, solicitacaoErro };
   }
 
-  async function cadastrarEmail() {
+  async function prepararCondominio() {
+    let condominioPorteiro: Condominio | null = null;
+    if (precisaCodigoPorteiro) {
+      condominioPorteiro = await buscarCondominioPorCodigo(codigoCondominio);
+      if (!condominioPorteiro) throw new Error('Código de condomínio inválido. Confira o código informado.');
+    }
+    if (temCodigoMorador) {
+      const condominioMorador = await buscarCondominioPorCodigo(codigoCondominio);
+      if (!condominioMorador) throw new Error('Código de condomínio inválido. Confira o código informado.');
+    }
+    return condominioPorteiro;
+  }
+
+  function avisarConclusao(resultado: { solicitacaoErro: string }) {
+    if (tipo === 'morador' && codigoCondominio.trim()) {
+      Alert.alert('Cadastro concluído', resultado.solicitacaoErro ? 'Sua conta foi criada, mas o vínculo não foi enviado. Abra o Perfil e tente novamente.' : 'Sua conta foi criada e a solicitação de entrada foi enviada para a portaria.');
+    } else if (tipo === 'morador') {
+      Alert.alert('Cadastro concluído', 'Sua conta foi criada. Você pode vincular o condomínio depois pelo Perfil.');
+    } else if (modoPorteiro === 'entrar') {
+      Alert.alert('Pronto', 'Cadastro de portaria realizado.');
+    }
+  }
+
+  async function cadastrar() {
     if (!validarDadosBase()) return;
     let usuarioCriado: User | null = null;
     try {
       setLoading(true);
-      let condominioPorteiro: Condominio | null = null;
-      if (precisaCodigoPorteiro) {
-        condominioPorteiro = await buscarCondominioPorCodigo(codigoCondominio);
-        if (!condominioPorteiro) throw new Error('Código de condomínio inválido. Confira o código informado.');
+      const condominioPorteiro = await prepararCondominio();
+
+      if (usuarioAutenticado) {
+        const resultado = await salvarPerfil(usuarioAutenticado, condominioPorteiro);
+        await AsyncStorage.removeItem(GOOGLE_ROLE_STORAGE_KEY).catch(() => {});
+        avisarConclusao(resultado);
+        return;
       }
-      if (temCodigoMorador) {
-        const condominioMorador = await buscarCondominioPorCodigo(codigoCondominio);
-        if (!condominioMorador) throw new Error('Código de condomínio inválido. Confira o código informado.');
-      }
+
       const cred = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), senha);
       usuarioCriado = cred.user;
       const resultado = await salvarPerfil(cred.user, condominioPorteiro);
-      if (tipo === 'morador' && codigoCondominio.trim()) {
-        Alert.alert('Cadastro concluído', resultado.solicitacaoErro ? 'Sua conta foi criada, mas o vínculo não foi enviado. Abra o Perfil e tente novamente.' : 'Sua conta foi criada e a solicitação de entrada foi enviada para a portaria.');
-      } else if (tipo === 'morador') {
-        Alert.alert('Cadastro concluído', 'Sua conta foi criada. Você pode vincular o condomínio depois pelo Perfil.');
-      } else if (modoPorteiro === 'entrar') {
-        Alert.alert('Pronto', 'Cadastro de portaria realizado.');
-      }
+      avisarConclusao(resultado);
     } catch (e:any) {
       if (usuarioCriado) { try { await deleteUser(usuarioCriado); } catch {} }
       const codigo = String(e?.code || '');
@@ -171,9 +203,21 @@ export default function Register({ route, navigation }: any) {
     } finally { setLoading(false); }
   }
 
+  async function voltar() {
+    if (cadastroAutenticado) {
+      await AsyncStorage.removeItem(GOOGLE_ROLE_STORAGE_KEY).catch(() => {});
+      await signOut(auth);
+      return;
+    }
+    navigation?.goBack?.();
+  }
+
   return <KeyboardScreen contentContainerStyle={styles.container}>
-    <TouchableOpacity style={styles.backButton} onPress={() => navigation?.goBack?.()}><Ionicons name="arrow-back" size={20} color={colors.text}/></TouchableOpacity>
-    <Text style={styles.title}>Criar conta</Text><Text style={styles.help}>Escolha seu tipo de acesso e complete o cadastro.</Text>
+    <TouchableOpacity style={styles.backButton} onPress={voltar}><Ionicons name={cadastroAutenticado ? 'log-out-outline' : 'arrow-back'} size={20} color={colors.text}/></TouchableOpacity>
+    <Text style={styles.title}>{cadastroAutenticado ? 'Concluir cadastro' : 'Criar conta'}</Text>
+    <Text style={styles.help}>{cadastroAutenticado ? 'Sua conta foi autenticada. Complete os dados abaixo para entrar no Cegonha.' : 'Escolha seu tipo de acesso e complete o cadastro.'}</Text>
+
+    {contaGoogle && <View style={styles.googleConnected}><Ionicons name="logo-google" size={18} color={colors.text}/><View style={{flex:1}}><Text style={styles.googleTitle}>Conta Google conectada</Text><Text style={styles.googleEmail}>{usuarioAutenticado?.email || ''}</Text></View></View>}
 
     <View style={styles.roleRow}>
       <TouchableOpacity style={[styles.roleButton,tipo==='morador'&&{backgroundColor:colors.accent,borderColor:colors.accent}]} onPress={()=>{setTipo('morador');setCondominioConfirmado(null);}} disabled={ocupado}><Ionicons name="home-outline" size={19} color={tipo==='morador'?'#fff':colors.text}/><Text style={[styles.roleText,tipo==='morador'&&styles.roleTextActive]}>Morador</Text></TouchableOpacity>
@@ -200,13 +244,13 @@ export default function Register({ route, navigation }: any) {
       </>}
       {tipo==='morador'&&<View style={styles.twoCols}><TextInput style={[styles.input,styles.half]} placeholder="Bloco" autoCapitalize="characters" value={bloco} onChangeText={setBloco}/><TextInput style={[styles.input,styles.half]} placeholder="Apartamento" value={apartamento} onChangeText={setApartamento}/></View>}
       <TextInput style={styles.input} placeholder="Telefone" keyboardType="phone-pad" value={telefone} onChangeText={setTelefone}/>
-      <TextInput style={styles.input} placeholder="E-mail" autoCapitalize="none" autoCorrect={false} keyboardType="email-address" value={email} onChangeText={setEmail}/>
-      <TextInput style={styles.input} placeholder="Senha" secureTextEntry value={senha} onChangeText={setSenha} onSubmitEditing={cadastrarEmail}/>
-      <TouchableOpacity style={[styles.button,{backgroundColor:corAtiva},ocupado&&styles.disabled]} onPress={cadastrarEmail} disabled={ocupado}><Text style={styles.buttonText}>{loading?'Cadastrando...':'Criar conta'}</Text><Ionicons name="arrow-forward" size={18} color="#fff"/></TouchableOpacity>
+      <TextInput style={[styles.input,cadastroAutenticado&&styles.readonly]} placeholder="E-mail" autoCapitalize="none" autoCorrect={false} keyboardType="email-address" value={email} onChangeText={setEmail} editable={!cadastroAutenticado}/>
+      {!cadastroAutenticado&&<TextInput style={styles.input} placeholder="Senha" secureTextEntry value={senha} onChangeText={setSenha} onSubmitEditing={cadastrar}/>} 
+      <TouchableOpacity style={[styles.button,{backgroundColor:corAtiva},ocupado&&styles.disabled]} onPress={cadastrar} disabled={ocupado}><Text style={styles.buttonText}>{loading?'Salvando...':cadastroAutenticado?'Concluir cadastro':'Criar conta'}</Text><Ionicons name="arrow-forward" size={18} color="#fff"/></TouchableOpacity>
     </View>
   </KeyboardScreen>;
 }
 
 function makeStyles(colors:ThemeColors){return StyleSheet.create({
-  container:{paddingHorizontal:22,paddingTop:48,paddingBottom:90,backgroundColor:colors.background},backButton:{width:42,height:42,borderRadius:21,backgroundColor:colors.surface,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:colors.border,marginBottom:22},title:{fontSize:42,fontWeight:'700',color:colors.text,letterSpacing:-0.7},help:{fontSize:18,color:colors.muted,marginTop:2,marginBottom:22},roleRow:{flexDirection:'row',gap:10,marginBottom:14},roleButton:{flex:1,paddingVertical:13,paddingHorizontal:14,borderRadius:radius.pill,borderWidth:1,borderColor:colors.border,backgroundColor:colors.surface,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8},roleText:{fontSize:16,fontWeight:'600',color:colors.text},roleTextActive:{color:'#fff'},sectionCard:{backgroundColor:colors.surface,borderRadius:radius.large,padding:15,borderWidth:1,borderColor:colors.border,marginBottom:12},sectionLabel:{fontSize:18,fontWeight:'700',marginBottom:10},segmentRow:{flexDirection:'row',gap:8,marginBottom:10},segment:{flex:1,padding:10,borderRadius:radius.pill,backgroundColor:colors.surfaceSoft,alignItems:'center'},segmentText:{fontWeight:'600',color:colors.text},formCard:{backgroundColor:colors.surface,borderRadius:radius.large,padding:16,borderWidth:1,borderColor:colors.border,...shadow},input:{backgroundColor:colors.surfaceSoft,borderWidth:0,borderRadius:radius.medium,paddingHorizontal:15,paddingVertical:13,marginBottom:10},optionalInfo:{fontSize:14,color:colors.muted,marginTop:-2,marginBottom:10},verify:{alignSelf:'flex-start',flexDirection:'row',alignItems:'center',gap:6,paddingVertical:6,marginTop:-3,marginBottom:8},verifyText:{fontWeight:'600'},confirmedRow:{flexDirection:'row',alignItems:'center',gap:6,marginBottom:10},confirmed:{color:colors.success,fontWeight:'600'},twoCols:{flexDirection:'row',gap:10},half:{flex:1},button:{paddingVertical:15,borderRadius:radius.pill,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:8,marginTop:2},buttonText:{color:'#fff',fontSize:17,fontWeight:'700'},disabled:{opacity:0.55}
+  container:{paddingHorizontal:22,paddingTop:48,paddingBottom:90,backgroundColor:colors.background},backButton:{width:42,height:42,borderRadius:21,backgroundColor:colors.surface,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:colors.border,marginBottom:22},title:{fontSize:42,fontWeight:'700',color:colors.text,letterSpacing:-0.7},help:{fontSize:18,color:colors.muted,marginTop:2,marginBottom:22},googleConnected:{flexDirection:'row',alignItems:'center',gap:10,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,padding:13,marginBottom:14},googleTitle:{fontSize:15,fontWeight:'700'},googleEmail:{fontSize:13,color:colors.muted,marginTop:1},roleRow:{flexDirection:'row',gap:10,marginBottom:14},roleButton:{flex:1,paddingVertical:13,paddingHorizontal:14,borderRadius:radius.pill,borderWidth:1,borderColor:colors.border,backgroundColor:colors.surface,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8},roleText:{fontSize:16,fontWeight:'600',color:colors.text},roleTextActive:{color:'#fff'},sectionCard:{backgroundColor:colors.surface,borderRadius:radius.large,padding:15,borderWidth:1,borderColor:colors.border,marginBottom:12},sectionLabel:{fontSize:18,fontWeight:'700',marginBottom:10},segmentRow:{flexDirection:'row',gap:8,marginBottom:10},segment:{flex:1,padding:10,borderRadius:radius.pill,backgroundColor:colors.surfaceSoft,alignItems:'center'},segmentText:{fontWeight:'600',color:colors.text},formCard:{backgroundColor:colors.surface,borderRadius:radius.large,padding:16,borderWidth:1,borderColor:colors.border,...shadow},input:{backgroundColor:colors.surfaceSoft,borderWidth:0,borderRadius:radius.medium,paddingHorizontal:15,paddingVertical:13,marginBottom:10},readonly:{opacity:.7},optionalInfo:{fontSize:14,color:colors.muted,marginTop:-2,marginBottom:10},verify:{alignSelf:'flex-start',flexDirection:'row',alignItems:'center',gap:6,paddingVertical:6,marginTop:-3,marginBottom:8},verifyText:{fontWeight:'600'},confirmedRow:{flexDirection:'row',alignItems:'center',gap:6,marginBottom:10},confirmed:{color:colors.success,fontWeight:'600'},twoCols:{flexDirection:'row',gap:10},half:{flex:1},button:{paddingVertical:15,borderRadius:radius.pill,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:8,marginTop:2},buttonText:{color:'#fff',fontSize:17,fontWeight:'700'},disabled:{opacity:0.55}
 });}
