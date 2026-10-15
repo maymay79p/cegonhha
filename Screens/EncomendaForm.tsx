@@ -48,16 +48,20 @@ export default function EncomendaForm({ navigation, route }: any) {
   }, [perfil?.condominioId, perfil?.tipo, selecionado?.id]);
 
   useEffect(() => {
-    if (!selecionado?.id) {
+    if (!selecionado?.id || !perfil?.condominioId) {
       setPrevisoes([]);
       setPrevisaoSelecionada(null);
       return;
     }
-    const q = query(collection(db,'previsoes'),where('moradorId','==',selecionado.id));
+    const q = query(
+      collection(db,'previsoes'),
+      where('moradorId','==',selecionado.id),
+      where('condominioId','==',perfil.condominioId),
+    );
     return onSnapshot(q, snap => {
       const lista = snap.docs.map(d=>({id:d.id,...d.data()})) as any[];
       lista.sort((a,b)=>(b.criadaEm?.seconds||0)-(a.criadaEm?.seconds||0));
-      const visiveis = lista.filter(p=>p.condominioId===perfil?.condominioId).slice(0,3);
+      const visiveis = lista.slice(0,3);
       setPrevisoes(visiveis);
       setPrevisaoSelecionada(atual => atual ? (visiveis.find(p=>p.id===atual.id) || null) : null);
     }, () => setPrevisoes([]));
@@ -77,7 +81,7 @@ export default function EncomendaForm({ navigation, route }: any) {
     try {
       setLoading(true);
       if (!ignorarDuplicidade) {
-        const duplicada = await buscarDuplicada(selecionado.id);
+        const duplicada = await buscarDuplicada(selecionado.id, perfil.condominioId);
         if (duplicada) {
           setLoading(false);
           return Alert.alert('Possível duplicidade','Já existe uma encomenda registrada para este morador nos últimos 10 minutos. Deseja registrar mesmo assim?',[{text:'Cancelar',style:'cancel'},{text:'Registrar mesmo assim',onPress:()=>salvar(true)}]);
