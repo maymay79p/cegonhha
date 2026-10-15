@@ -2,6 +2,7 @@
   "expo": {
     "name": "Cegonha",
     "slug": "cegonha",
+    "owner": "marinalupitta",
     "scheme": "cegonha",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -22,6 +23,11 @@
     },
     "ios": {
       "bundleIdentifier": "com.maymay79p.cegonha"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "674830ff-4cb9-46ba-ac15-4e6d959534b6"
+      }
     }
   }
 }
