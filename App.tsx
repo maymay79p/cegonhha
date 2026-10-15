@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { NavigationContainer } from '@react-navigation/native';
+import { DefaultTheme as NavigationDefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,9 +32,9 @@ import Condominio from './Screens/Condominio';
 import CodigoCondominio from './Screens/CodigoCondominio';
 import { RootStackParamList } from './types';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { ThemeProvider } from './context/ThemeContext';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { AppText } from './components/AppText';
-import { colors, fonts, shadow } from './theme';
+import { fonts, shadow, ThemeColors } from './theme';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const MoradorTab = createBottomTabNavigator();
@@ -59,52 +59,80 @@ const porteiroIcons: Record<string, { on: string; off: string }> = {
 };
 
 function FloatingTabIcon({ routeName, focused, color, porter = false }: any) {
+  const { colors } = useTheme();
   const mapa = porter ? porteiroIcons : moradorIcons;
   const item = mapa[routeName] || { on: 'ellipse', off: 'ellipse-outline' };
-  return <View style={[styles.iconWrap, focused && (porter ? styles.iconWrapPorter : styles.iconWrapResident)]}><Ionicons name={(focused ? item.on : item.off) as any} size={21} color={color} /></View>;
+  return (
+    <View style={[
+      styles.iconWrap,
+      focused && { backgroundColor: porter ? colors.porterSoft : colors.accentSoft },
+    ]}>
+      <Ionicons name={(focused ? item.on : item.off) as any} size={21} color={color} />
+    </View>
+  );
 }
 
-function tabBarStyle(bottom: number) {
-  return { position: 'absolute' as const, left: 10, right: 10, bottom: Math.max(bottom, 8) + 8, height: 70, paddingTop: 7, paddingBottom: 7, backgroundColor: colors.surface, borderTopWidth: 0, borderRadius: 28, ...shadow };
+function tabBarStyle(bottom: number, colors: ThemeColors) {
+  return {
+    position: 'absolute' as const,
+    left: 10,
+    right: 10,
+    bottom: Math.max(bottom, 8) + 8,
+    height: 70,
+    paddingTop: 7,
+    paddingBottom: 7,
+    backgroundColor: colors.surface,
+    borderTopWidth: 0,
+    borderRadius: 28,
+    ...shadow,
+  };
 }
 
 function MoradorTabs() {
   const insets = useSafeAreaInsets();
-  return <MoradorTab.Navigator id="MoradorTabs" screenOptions={({ route }) => ({
-    headerShown: false,
-    tabBarIcon: ({ focused, color }) => <FloatingTabIcon routeName={route.name} focused={focused} color={color} />,
-    tabBarActiveTintColor: colors.accent,
-    tabBarInactiveTintColor: '#8D8884',
-    tabBarStyle: tabBarStyle(insets.bottom),
-    tabBarLabelStyle: { fontFamily: fonts.semiBold, fontSize: 10, marginTop: -2 },
-    tabBarItemStyle: { borderRadius: 24 },
-  })}>
-    <MoradorTab.Screen name="Inicio" component={MoradorHome} options={{ title: 'Início' }} />
-    <MoradorTab.Screen name="MinhasEncomendas" component={MoradorEncomendas} options={{ title: 'Entregas' }} />
-    <MoradorTab.Screen name="Mural" component={Mural} options={{ title: 'Mural' }} />
-    <MoradorTab.Screen name="Previsoes" component={Previsoes} options={{ title: 'Esperadas' }} />
-    <MoradorTab.Screen name="Notificacoes" component={Notificacoes} options={{ title: 'Avisos' }} />
-    <MoradorTab.Screen name="Perfil" component={Perfil} options={{ title: 'Perfil' }} />
-  </MoradorTab.Navigator>;
+  const { colors } = useTheme();
+  return (
+    <MoradorTab.Navigator id="MoradorTabs" screenOptions={({ route }) => ({
+      headerShown: false,
+      sceneStyle: { backgroundColor: colors.background },
+      tabBarIcon: ({ focused, color }) => <FloatingTabIcon routeName={route.name} focused={focused} color={color} />,
+      tabBarActiveTintColor: colors.accent,
+      tabBarInactiveTintColor: colors.muted,
+      tabBarStyle: tabBarStyle(insets.bottom, colors),
+      tabBarLabelStyle: { fontFamily: fonts.semiBold, fontSize: 10, marginTop: -2 },
+      tabBarItemStyle: { borderRadius: 24 },
+    })}>
+      <MoradorTab.Screen name="Inicio" component={MoradorHome} options={{ title: 'Início' }} />
+      <MoradorTab.Screen name="MinhasEncomendas" component={MoradorEncomendas} options={{ title: 'Entregas' }} />
+      <MoradorTab.Screen name="Mural" component={Mural} options={{ title: 'Mural' }} />
+      <MoradorTab.Screen name="Previsoes" component={Previsoes} options={{ title: 'Esperadas' }} />
+      <MoradorTab.Screen name="Notificacoes" component={Notificacoes} options={{ title: 'Avisos' }} />
+      <MoradorTab.Screen name="Perfil" component={Perfil} options={{ title: 'Perfil' }} />
+    </MoradorTab.Navigator>
+  );
 }
 
 function PorteiroTabs() {
   const insets = useSafeAreaInsets();
-  return <PorteiroTab.Navigator id="PorteiroTabs" screenOptions={({ route }) => ({
-    headerShown: false,
-    tabBarIcon: ({ focused, color }) => <FloatingTabIcon routeName={route.name} focused={focused} color={color} porter />,
-    tabBarActiveTintColor: colors.porter,
-    tabBarInactiveTintColor: '#8D8884',
-    tabBarStyle: tabBarStyle(insets.bottom),
-    tabBarLabelStyle: { fontFamily: fonts.semiBold, fontSize: 11, marginTop: -2 },
-    tabBarItemStyle: { borderRadius: 24 },
-  })}>
-    <PorteiroTab.Screen name="Painel" component={PorteiroHome} options={{ title: 'Painel' }} />
-    <PorteiroTab.Screen name="Encomendas" component={PorteiroEncomendas} options={{ title: 'Entregas' }} />
-    <PorteiroTab.Screen name="OCR" component={OCR} options={{ title: 'Leitura' }} />
-    <PorteiroTab.Screen name="Mural" component={Mural} options={{ title: 'Mural' }} />
-    <PorteiroTab.Screen name="Perfil" component={Perfil} options={{ title: 'Perfil' }} />
-  </PorteiroTab.Navigator>;
+  const { colors } = useTheme();
+  return (
+    <PorteiroTab.Navigator id="PorteiroTabs" screenOptions={({ route }) => ({
+      headerShown: false,
+      sceneStyle: { backgroundColor: colors.background },
+      tabBarIcon: ({ focused, color }) => <FloatingTabIcon routeName={route.name} focused={focused} color={color} porter />,
+      tabBarActiveTintColor: colors.porter,
+      tabBarInactiveTintColor: colors.muted,
+      tabBarStyle: tabBarStyle(insets.bottom, colors),
+      tabBarLabelStyle: { fontFamily: fonts.semiBold, fontSize: 11, marginTop: -2 },
+      tabBarItemStyle: { borderRadius: 24 },
+    })}>
+      <PorteiroTab.Screen name="Painel" component={PorteiroHome} options={{ title: 'Painel' }} />
+      <PorteiroTab.Screen name="Encomendas" component={PorteiroEncomendas} options={{ title: 'Entregas' }} />
+      <PorteiroTab.Screen name="OCR" component={OCR} options={{ title: 'Leitura' }} />
+      <PorteiroTab.Screen name="Mural" component={Mural} options={{ title: 'Mural' }} />
+      <PorteiroTab.Screen name="Perfil" component={Perfil} options={{ title: 'Perfil' }} />
+    </PorteiroTab.Navigator>
+  );
 }
 
 function AreaAutenticada() {
@@ -116,10 +144,29 @@ function AreaAutenticada() {
 
 function RootNavigator() {
   const { user, perfil, loading } = useAuth();
-  if (loading) return <View style={styles.loading}><ActivityIndicator size="large" color={colors.accent} /><AppText style={styles.loadingText}>Abrindo sua conta...</AppText></View>;
-  const noHeader = { headerShown: false, contentStyle: { backgroundColor: colors.background } };
+  const { colors, dark } = useTheme();
+  const themedStyles = useMemo(() => makeStyles(colors), [colors]);
 
-  return <NavigationContainer>
+  if (loading) {
+    return <View style={themedStyles.loading}><ActivityIndicator size="large" color={colors.accent} /><AppText style={themedStyles.loadingText}>Abrindo sua conta...</AppText></View>;
+  }
+
+  const noHeader = { headerShown: false, contentStyle: { backgroundColor: colors.background } };
+  const navigationTheme = {
+    ...NavigationDefaultTheme,
+    dark,
+    colors: {
+      ...NavigationDefaultTheme.colors,
+      primary: colors.accent,
+      background: colors.background,
+      card: colors.surface,
+      text: colors.text,
+      border: colors.border,
+      notification: colors.accent,
+    },
+  };
+
+  return <NavigationContainer theme={navigationTheme}>
     {!user ? <Stack.Navigator id="PublicStack" screenOptions={noHeader}>
       <Stack.Screen name="Login" component={Login} />
       <Stack.Screen name="Register" component={Register} />
@@ -147,16 +194,27 @@ function RootNavigator() {
 }
 
 function AppWithFonts() {
+  const { colors } = useTheme();
+  const themedStyles = useMemo(() => makeStyles(colors), [colors]);
   const [fontsLoaded] = useFonts({ EBGaramond_400Regular, EBGaramond_500Medium, EBGaramond_600SemiBold, EBGaramond_700Bold });
   const [onboarding, setOnboarding] = useState<boolean | null>(null);
   useEffect(() => { AsyncStorage.getItem(ONBOARDING_KEY).then(v => setOnboarding(v === 'ok')).catch(() => setOnboarding(false)); }, []);
-  if (!fontsLoaded || onboarding === null) return <View style={styles.loading}><ActivityIndicator size="large" color={colors.accent} /></View>;
+  if (!fontsLoaded || onboarding === null) return <View style={themedStyles.loading}><ActivityIndicator size="large" color={colors.accent} /></View>;
   if (!onboarding) return <Onboarding onFinish={async () => { await AsyncStorage.setItem(ONBOARDING_KEY, 'ok'); setOnboarding(true); }} />;
-  return <ThemeProvider><AuthProvider><RootNavigator /></AuthProvider></ThemeProvider>;
+  return <AuthProvider><RootNavigator /></AuthProvider>;
 }
 
-export default function App() { return <SafeAreaProvider><AppWithFonts /></SafeAreaProvider>; }
+export default function App() {
+  return <SafeAreaProvider><ThemeProvider><AppWithFonts /></ThemeProvider></SafeAreaProvider>;
+}
 
 const styles = StyleSheet.create({
-  loading:{flex:1,alignItems:'center',justifyContent:'center',backgroundColor:colors.background},loadingText:{marginTop:12,color:colors.muted,fontSize:17},iconWrap:{width:32,height:28,borderRadius:14,alignItems:'center',justifyContent:'center'},iconWrapResident:{backgroundColor:colors.accentSoft},iconWrapPorter:{backgroundColor:colors.porterSoft},
+  iconWrap:{width:32,height:28,borderRadius:14,alignItems:'center',justifyContent:'center'},
 });
+
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    loading:{flex:1,alignItems:'center',justifyContent:'center',backgroundColor:colors.background},
+    loadingText:{marginTop:12,color:colors.muted,fontSize:17},
+  });
+}
