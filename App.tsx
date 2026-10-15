@@ -18,6 +18,7 @@ import EncomendaForm from './Screens/EncomendaForm';
 import Detalhes from './Screens/Detalhes';
 import Notificacoes from './Screens/Notificacoes';
 import Relatorios from './Screens/Relatorios';
+import Denuncias from './Screens/Denuncias';
 import Perfil from './Screens/Perfil';
 import Previsoes from './Screens/Previsoes';
 import MoradorHome from './Screens/MoradorHome';
@@ -181,6 +182,7 @@ function RootNavigator() {
       {perfil.tipo === 'porteiro' && <Stack.Screen name="EncomendaForm" component={EncomendaForm} />}
       <Stack.Screen name="Detalhes" component={Detalhes} />
       {perfil.tipo === 'porteiro' && <Stack.Screen name="Relatorios" component={Relatorios} />}
+      <Stack.Screen name="Denuncias" component={Denuncias} />
       <Stack.Screen name="Notificacoes" component={Notificacoes} />
       <Stack.Screen name="Perfil" component={Perfil} />
       {perfil.tipo === 'morador' && <Stack.Screen name="Previsoes" component={Previsoes} />}
