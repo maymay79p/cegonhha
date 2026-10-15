@@ -2,14 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
 import {
   collection,
-  deleteDoc,
   doc,
   onSnapshot,
   query,
   serverTimestamp,
-  setDoc,
   updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../firebase';
@@ -107,14 +106,18 @@ export default function Denuncias({ navigation }: any) {
     return true;
   }), [itens, filtro]);
 
-  async function resolver(item: any, status: string) {
-    if (!ehPortaria || !user) return;
-    await updateDoc(doc(db, 'muralDenuncias', item.id), {
+  function dadosResolucao(status: string) {
+    return {
       status,
       resolvidaEm: serverTimestamp(),
-      resolvidoPorId: user.uid,
-      resolvidoPorNome: perfil?.nome || user.displayName || 'Portaria',
-    });
+      resolvidoPorId: user?.uid || '',
+      resolvidoPorNome: perfil?.nome || user?.displayName || 'Portaria',
+    };
+  }
+
+  async function resolver(item: any, status: string) {
+    if (!ehPortaria || !user) return;
+    await updateDoc(doc(db, 'muralDenuncias', item.id), dadosResolucao(status));
   }
 
   async function ignorar(item: any) {
@@ -133,10 +136,13 @@ export default function Denuncias({ navigation }: any) {
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Excluir', style: 'destructive', onPress: async () => {
+          if (!ehPortaria || !user) return;
           try {
             setProcessandoId(item.id);
-            await deleteDoc(doc(db, 'mural', item.comentarioId));
-            await resolver(item, 'publicacao_excluida');
+            const batch = writeBatch(db);
+            batch.delete(doc(db, 'mural', item.comentarioId));
+            batch.update(doc(db, 'muralDenuncias', item.id), dadosResolucao('publicacao_excluida'));
+            await batch.commit();
           } catch (e: any) {
             Alert.alert('Denúncias', mensagemErro(e, 'Não foi possível excluir a publicação.'));
           } finally {
@@ -149,9 +155,11 @@ export default function Denuncias({ navigation }: any) {
 
   async function alterarBanimento(item: any, ativo: boolean) {
     if (!ehPortaria || !perfil?.condominioId || !user) return;
+    if (item.autorId === user.uid) return Alert.alert('Denúncias', 'A portaria não pode banir a própria conta.');
     try {
       setProcessandoId(item.id);
-      await setDoc(doc(db, 'muralBanidos', idBanimento(perfil.condominioId, item.autorId)), {
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'muralBanidos', idBanimento(perfil.condominioId, item.autorId)), {
         usuarioId: item.autorId,
         usuarioNome: item.autorNome || '',
         condominioId: perfil.condominioId,
@@ -160,7 +168,8 @@ export default function Denuncias({ navigation }: any) {
         banidoPorNome: ativo ? (perfil.nome || '') : '',
         atualizadoEm: serverTimestamp(),
       }, { merge: true });
-      await resolver(item, ativo ? 'autor_banido' : 'autor_desbanido');
+      batch.update(doc(db, 'muralDenuncias', item.id), dadosResolucao(ativo ? 'autor_banido' : 'autor_desbanido'));
+      await batch.commit();
     } catch (e: any) {
       Alert.alert('Denúncias', mensagemErro(e, ativo ? 'Não foi possível banir o autor.' : 'Não foi possível desbanir o autor.'));
     } finally {
