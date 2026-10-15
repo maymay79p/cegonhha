@@ -103,7 +103,7 @@ async function lerTextoMLKit(imagemUri: string) {
   } catch (erro: any) {
     const mensagem = String(erro?.message || erro || '');
     if (/native module|cannot find|not found|undefined|turbo/i.test(mensagem)) {
-      throw new Error('O Google ML Kit não está disponível nesta instalação do Cegonha. Instale as dependências e gere uma nova development build do Android.');
+      throw new Error('O OCR Google ML Kit precisa da development build do Cegonha e não funciona no Expo Go. O restante do app pode ser testado no Expo Go normalmente. Para habilitar o OCR, gere o APK com “npm run build:android” e depois use “npm run dev”.');
     }
     throw erro;
   }
@@ -112,8 +112,6 @@ async function lerTextoMLKit(imagemUri: string) {
 export async function reconhecerEtiqueta(imagemUri: string, condominioId: string): Promise<ResultadoOCR> {
   if (!condominioId) throw new Error('A conta da portaria ainda não está vinculada a um condomínio.');
 
-  // O reconhecimento é feito localmente no aparelho pelo Google ML Kit.
-  // Depois, o Cegonha cruza os dados lidos com os moradores do condomínio.
   const texto = await lerTextoMLKit(imagemUri);
   const dados = extrairDados(texto);
   const snap = await getDocs(query(collection(db, 'usuarios'), where('condominioId', '==', condominioId)));
