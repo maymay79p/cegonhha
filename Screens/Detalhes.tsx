@@ -68,7 +68,7 @@ export default function Detalhes({route,navigation}:any){
   }
 
   function informarRetirada(){
-    if(!ehMorador||retiradaSolicitada||retiradaConfirmada)return;
+    if(!ehMorador||retiradaSolicitada||retiradaConfirmada||contestacao)return;
     Alert.alert('Informar retirada?','A portaria receberá um aviso e precisará confirmar a retirada no sistema.',[
       {text:'Cancelar',style:'cancel'},
       {text:'Sim, já retirei',onPress:async()=>{
@@ -140,7 +140,7 @@ export default function Detalhes({route,navigation}:any){
         <View style={styles.eventBody}><Text style={styles.eventTitle}>{ev.titulo}</Text><Text style={styles.eventMeta}>{ev.data?new Date(ev.data).toLocaleString('pt-BR'):''}{ev.atorNome?' · '+ev.atorNome:''}</Text>{!!ev.observacao&&<Text style={styles.eventObs}>{ev.observacao}</Text>}</View>
       </View>)}</View>
 
-      {ehMorador&&!retiradaConfirmada&&!retiradaSolicitada&&<TouchableOpacity style={[styles.button,{backgroundColor:colors.accent},loading&&{opacity:.55}]} onPress={informarRetirada} disabled={loading}><Text style={styles.buttonText}>Já retirei esta encomenda</Text><Ionicons name="hand-right-outline" size={20} color="#fff"/></TouchableOpacity>}
+      {ehMorador&&!retiradaConfirmada&&!retiradaSolicitada&&!contestacao&&<TouchableOpacity style={[styles.button,{backgroundColor:colors.accent},loading&&{opacity:.55}]} onPress={informarRetirada} disabled={loading}><Text style={styles.buttonText}>Já retirei esta encomenda</Text><Ionicons name="hand-right-outline" size={20} color="#fff"/></TouchableOpacity>}
       {ehMorador&&retiradaSolicitada&&!retiradaConfirmada&&<View style={styles.waiting}><Ionicons name="time-outline" size={19} color={colors.info}/><Text style={styles.waitingText}>Você informou a retirada. Aguardando a portaria confirmar.</Text></View>}
       {ehMorador&&!contestacao&&!retiradaSolicitada&&<TouchableOpacity style={[styles.outlineButton,loading&&{opacity:.55}]} onPress={contestar} disabled={loading}><Ionicons name="alert-circle-outline" size={19} color={colors.danger}/><Text style={styles.outlineButtonText}>{retiradaConfirmada?'Não retirei esta encomenda':'Não reconheço esta encomenda'}</Text></TouchableOpacity>}
 
