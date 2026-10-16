@@ -21,14 +21,20 @@ jobs:
       - name: Instalar dependências do app
         run: npm install --no-audit --no-fund
 
+      - name: Conferir versões esperadas pelo Expo
+        run: npx expo install --check
+
       - name: Verificar TypeScript
         run: npm run typecheck
 
-      - name: Validar prebuild Android e autolink nativo
-        run: npx expo prebuild --platform android --clean --no-install
+      - name: Executar Expo Doctor
+        run: npx expo-doctor@latest
 
       - name: Validar bundle do Expo Go
         run: npm run check:expo-go
+
+      - name: Validar prebuild Android dos recursos nativos opcionais
+        run: npx expo prebuild --platform android --clean --no-install
 
       - name: Instalar dependências das Functions
         run: npm install --prefix functions --no-audit --no-fund
