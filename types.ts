@@ -71,7 +71,7 @@ export type ResultadoOCR = {
   apartamento?: string | null;
   candidatos: CandidatoOCR[];
   tempoMs?: number;
-  motor?: 'google-ml-kit';
+  motor?: 'ocr-space';
 };
 
 export type OCRMeta = {
