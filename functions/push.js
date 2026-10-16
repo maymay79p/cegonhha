@@ -3,6 +3,8 @@
 const TITULOS = {
   chegada: 'Encomenda chegou 📦',
   retirada: 'Retirada registrada',
+  retirada_solicitada: 'Morador informou retirada',
+  contestacao_encomenda: 'Encomenda contestada',
   lembrete: 'Encomenda aguardando retirada',
   vinculo: 'Atualização do condomínio',
   solicitacao_vinculo: 'Nova solicitação de morador',
