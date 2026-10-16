@@ -10,16 +10,16 @@ function executar(comando, args) {
   if (resultado.status !== 0) process.exit(resultado.status || 1);
 }
 
-const major = Number(process.versions.node.split('.')[0]);
-if (!Number.isFinite(major) || major < 20) {
-  console.error('\n[Cegonha] Use Node.js 20 ou 22 para evitar conflitos com o Expo.');
-  console.error(`[Cegonha] Versao atual: ${process.version}\n`);
+const [major, minor] = process.versions.node.split('.').map(Number);
+if (!Number.isFinite(major) || major < 22 || (major === 22 && minor < 13)) {
+  console.error('\n[Cegonha] O Expo SDK 57 precisa de Node.js 22.13 ou mais recente.');
+  console.error(`[Cegonha] Versão atual: ${process.version}\n`);
   process.exit(1);
 }
 
-console.log('\n=== Cegonha · configuracao simples ===');
+console.log('\n=== Cegonha · configuração simples ===');
 console.log(`[1/2] Node ${process.version} OK`);
-console.log('[2/2] Instalando/ajustando dependencias...\n');
+console.log('[2/2] Instalando/ajustando dependências...\n');
 
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 executar(npm, ['install', '--no-audit', '--no-fund']);
@@ -28,16 +28,15 @@ console.log('\nVerificando TypeScript...\n');
 executar(npm, ['run', 'typecheck']);
 
 console.log('\n=== Pronto ===');
-console.log('Para abrir rapidamente no Expo Go:');
+console.log('Modo recomendado (APK de desenvolvimento já instalada):');
 console.log('  npm start');
 console.log('');
-console.log('Para OCR (Google ML Kit) + push completos, use uma development build:');
-console.log('  npm run build:android    # somente quando precisar gerar/atualizar o APK');
-console.log('  npm run dev              # nas proximas vezes');
+console.log('Se OCR/Google disserem que o módulo nativo não existe, gere UMA nova APK limpa:');
+console.log('  npm run rebuild:android');
 console.log('');
-console.log('Firebase basico (nao exige Cloud Functions/Blaze):');
+console.log('Expo Go, apenas para telas sem OCR/Google/push:');
+console.log('  npm run go');
+console.log('');
+console.log('Firebase básico (regras, sem Functions/Blaze):');
 console.log('  npm run firebase:deploy');
-console.log('');
-console.log('Backend de push (opcional e exige Firebase Blaze):');
-console.log('  npm run firebase:deploy:push');
 console.log('');
