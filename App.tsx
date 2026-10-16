@@ -116,7 +116,10 @@ function MoradorTabs() {
   return (
     <MoradorTab.Navigator id="MoradorTabs" screenOptions={({ route }) => ({
       headerShown: false,
-      sceneStyle: { backgroundColor: colors.background },
+      sceneStyle: {
+        backgroundColor: colors.background,
+        paddingTop: route.name === 'Perfil' || route.name === 'Previsoes' ? 0 : insets.top + 2,
+      },
       tabBarIcon: ({ focused, color }) => <FloatingTabIcon routeName={route.name} focused={focused} color={color} />,
       tabBarActiveTintColor: colors.accent,
       tabBarInactiveTintColor: colors.muted,
@@ -141,7 +144,10 @@ function PorteiroTabs() {
   return (
     <PorteiroTab.Navigator id="PorteiroTabs" screenOptions={({ route }) => ({
       headerShown: false,
-      sceneStyle: { backgroundColor: colors.background },
+      sceneStyle: {
+        backgroundColor: colors.background,
+        paddingTop: route.name === 'Perfil' ? 0 : route.name === 'OCR' ? insets.top : insets.top + 2,
+      },
       tabBarIcon: ({ focused, color }) => <FloatingTabIcon routeName={route.name} focused={focused} color={color} porter />,
       tabBarActiveTintColor: colors.porter,
       tabBarInactiveTintColor: colors.muted,
@@ -169,6 +175,7 @@ function AreaAutenticada() {
 function RootNavigator() {
   const { user, perfil, loading } = useAuth();
   const { colors, dark } = useTheme();
+  const insets = useSafeAreaInsets();
   const themedStyles = useMemo(() => makeStyles(colors), [colors]);
 
   if (loading) {
@@ -176,6 +183,8 @@ function RootNavigator() {
   }
 
   const noHeader = { headerShown: false, contentStyle: { backgroundColor: colors.background } };
+  const stackSafe20 = { headerShown: false, contentStyle: { backgroundColor: colors.background, paddingTop: insets.top + 2 } };
+  const stackSafe22 = { headerShown: false, contentStyle: { backgroundColor: colors.background, paddingTop: insets.top } };
   const navigationTheme = {
     ...NavigationDefaultTheme,
     dark,
@@ -200,19 +209,19 @@ function RootNavigator() {
       <Stack.Screen name="Privacidade" component={Privacidade} />
     </Stack.Navigator> : <Stack.Navigator id="AuthenticatedStack" screenOptions={noHeader}>
       <Stack.Screen name="Home" component={AreaAutenticada} />
-      {perfil.tipo === 'porteiro' && <Stack.Screen name="OCR" component={OCR} />}
-      {perfil.tipo === 'porteiro' && <Stack.Screen name="OCRHistorico" component={OCRHistorico} />}
+      {perfil.tipo === 'porteiro' && <Stack.Screen name="OCR" component={OCR} options={stackSafe22} />}
+      {perfil.tipo === 'porteiro' && <Stack.Screen name="OCRHistorico" component={OCRHistorico} options={stackSafe20} />}
       {perfil.tipo === 'porteiro' && <Stack.Screen name="EncomendaForm" component={EncomendaForm} />}
       <Stack.Screen name="Detalhes" component={Detalhes} />
-      {perfil.tipo === 'porteiro' && <Stack.Screen name="Relatorios" component={Relatorios} />}
-      <Stack.Screen name="Denuncias" component={Denuncias} />
-      <Stack.Screen name="Notificacoes" component={Notificacoes} />
+      {perfil.tipo === 'porteiro' && <Stack.Screen name="Relatorios" component={Relatorios} options={stackSafe20} />}
+      <Stack.Screen name="Denuncias" component={Denuncias} options={stackSafe20} />
+      <Stack.Screen name="Notificacoes" component={Notificacoes} options={stackSafe20} />
       <Stack.Screen name="Perfil" component={Perfil} />
       {perfil.tipo === 'morador' && <Stack.Screen name="Previsoes" component={Previsoes} />}
-      {perfil.tipo === 'porteiro' && <Stack.Screen name="SolicitacoesCondominio" component={SolicitacoesCondominio} />}
+      {perfil.tipo === 'porteiro' && <Stack.Screen name="SolicitacoesCondominio" component={SolicitacoesCondominio} options={stackSafe20} />}
       <Stack.Screen name="PessoasCondominio" component={PessoasCondominio} />
       <Stack.Screen name="Privacidade" component={Privacidade} />
-      <Stack.Screen name="Mural" component={Mural} />
+      <Stack.Screen name="Mural" component={Mural} options={stackSafe20} />
       <Stack.Screen name="Condominio" component={Condominio} />
       <Stack.Screen name="CodigoCondominio" component={CodigoCondominio} />
     </Stack.Navigator>}
