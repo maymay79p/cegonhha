@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApps, initializeApp } from 'firebase/app';
 import { getAuth, initializeAuth } from 'firebase/auth';
 import * as firebaseAuth from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'AIzaSyDSzJKJvm1rpnSIslT9bszZTQgK1XQs0Lw',
@@ -24,6 +24,15 @@ try {
   auth = getAuth(app);
 }
 
-const db = getFirestore(app);
+// Proteção adicional: o Firestore normalmente rejeita qualquer campo `undefined`,
+// inclusive quando ele aparece dentro de arrays/objetos aninhados. Mantemos os
+// serviços normalizando os dados e também ativamos esta salvaguarda global para
+// que um campo opcional esquecido não derrube uma operação inteira.
+let db;
+try {
+  db = initializeFirestore(app, { ignoreUndefinedProperties: true });
+} catch {
+  db = getFirestore(app);
+}
 
 export { app, auth, db };
