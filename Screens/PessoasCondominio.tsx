@@ -143,7 +143,7 @@ function makeStyles(colors: ThemeColors) {
     stat:{flex:1,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,paddingVertical:12,paddingHorizontal:8,alignItems:'center'},
     statNumber:{fontSize:25,fontWeight:'700'},
     statLabel:{fontSize:12,color:colors.muted,marginTop:1},
-    searchBox:{height:50,backgroundColor:colors.surface,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,flexDirection:'row',alignItems:'center,gap:8,paddingHorizontal:13},
+    searchBox:{height:50,backgroundColor:colors.surface,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,flexDirection:'row',alignItems:'center',gap:8,paddingHorizontal:13},
     searchInput:{flex:1,borderWidth:0,backgroundColor:'transparent',paddingHorizontal:0,paddingVertical:0},
     filters:{flexDirection:'row',gap:7,marginVertical:11},
     filter:{paddingHorizontal:13,paddingVertical:8,borderRadius:radius.pill,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},
