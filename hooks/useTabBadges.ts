@@ -11,9 +11,9 @@ function chaveMural(uid: string, condominioId: string) {
 }
 
 function dataEmMs(item: any) {
-  if (typeof item?.criadoEmCliente === 'number') return item.criadoEmCliente;
   if (typeof item?.criadoEm?.toMillis === 'function') return item.criadoEm.toMillis();
   if (typeof item?.criadoEm?.seconds === 'number') return item.criadoEm.seconds * 1000;
+  if (typeof item?.criadoEmCliente === 'number') return item.criadoEmCliente;
   return 0;
 }
 
