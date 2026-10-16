@@ -187,7 +187,25 @@ try {
   assert.equal(perfilFinal.data()?.condominioId, CONDOMINIO_ID, 'Perfil do morador deve ficar vinculado ao condomínio.');
   assert.equal(solicitacaoFinal.data()?.status, 'concluida', 'Solicitação deve terminar como concluída.');
 
-  console.log('Fluxo de vínculo Morador ↔ Portaria validado com sucesso no Firestore Emulator.');
+  // 6) A nova tela Pessoas usa exatamente esta consulta: somente usuários do
+  // condomínio atual. Morador e Portaria devem conseguir ler a mesma lista.
+  const consultaPessoas = query(
+    collection(db, 'usuarios'),
+    where('condominioId', '==', CONDOMINIO_ID),
+  );
+  const pessoasComoMorador = await getDocs(consultaPessoas);
+  assert.equal(pessoasComoMorador.size, 2, 'Morador vinculado deve enxergar moradores e portaria do próprio condomínio.');
+  assert.deepEqual(
+    new Set(pessoasComoMorador.docs.map(d => d.data().tipo)),
+    new Set(['morador', 'porteiro']),
+    'Lista do condomínio deve conter os dois perfis ativos vinculados.',
+  );
+
+  await entrar(PORTARIA_EMAIL);
+  const pessoasComoPortaria = await getDocs(consultaPessoas);
+  assert.equal(pessoasComoPortaria.size, 2, 'Portaria deve enxergar a lista de usuários do próprio condomínio.');
+
+  console.log('Fluxo de vínculo e lista de pessoas Morador ↔ Portaria validados com sucesso no Firestore Emulator.');
 } finally {
   await signOut(auth).catch(() => {});
   await terminate(db).catch(() => {});
