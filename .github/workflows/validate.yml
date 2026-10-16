@@ -18,6 +18,12 @@ jobs:
         with:
           node-version: 22.13.1
 
+      - name: Configurar Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - name: Instalar dependências do app
         run: npm install --no-audit --no-fund
 
