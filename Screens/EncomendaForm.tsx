@@ -18,8 +18,6 @@ export default function EncomendaForm({ navigation, route }: any) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const moradorInicial = route?.params?.candidato || route?.params?.morador || null;
-  const textoOCR = route?.params?.textoOCR || '';
-  const fotoEtiqueta = route?.params?.fotoEtiqueta || '';
   const ocrMeta = route?.params?.ocrMeta;
 
   const [moradores, setMoradores] = useState<any[]>([]);
@@ -99,8 +97,6 @@ export default function EncomendaForm({ navigation, route }: any) {
         perfil,
         morador: selecionado,
         descricao,
-        textoOCR,
-        fotoEtiqueta,
         ocrMeta,
         previsao: previsaoSelecionada,
       });
@@ -137,7 +133,7 @@ export default function EncomendaForm({ navigation, route }: any) {
 
   return <KeyboardScreen contentContainerStyle={styles.screen}>
     <View style={styles.header}><TouchableOpacity style={styles.back} onPress={()=>navigation.goBack()}><Ionicons name="arrow-back" size={22} color={colors.text}/></TouchableOpacity><View><Text style={styles.eyebrow}>PORTARIA</Text><Text style={styles.title}>Registrar chegada</Text></View></View>
-    {!!textoOCR && <View style={styles.ocrBadge}><Ionicons name="scan-outline" size={17} color={colors.info}/><Text style={styles.ocrText}>Dados originados do OCR. Confirme o morador antes de salvar.</Text></View>}
+    {!!ocrMeta && <View style={styles.ocrBadge}><Ionicons name="scan-outline" size={17} color={colors.info}/><Text style={styles.ocrText}>Dados originados do OCR. A foto da etiqueta não é salva; confirme o morador antes de registrar.</Text></View>}
 
     {selecionado ? <View style={styles.selected}>
       <View style={styles.avatar}><Text style={styles.avatarText}>{(selecionado.nome||'M')[0].toUpperCase()}</Text></View>
