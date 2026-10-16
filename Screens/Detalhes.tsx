@@ -11,8 +11,8 @@ import { registrarRetirada } from '../services/encomendas';
 import {
   confirmarSolicitacaoRetirada,
   contestarEncomenda,
-  idContestacaoEncomenda,
-  idSolicitacaoRetirada,
+  refContestacaoEncomenda,
+  refSolicitacaoRetirada,
   solicitarConfirmacaoRetirada,
 } from '../services/interacoesEncomenda';
 import { radius, ThemeColors } from '../theme';
@@ -34,10 +34,10 @@ export default function Detalhes({route,navigation}:any){
     const unsubEncomenda=onSnapshot(doc(db,'encomendas',inicial.id),snap=>{
       if(snap.exists())setEncomenda({id:snap.id,...snap.data()});
     });
-    const unsubRetirada=onSnapshot(doc(db,'interacoesEncomendas',idSolicitacaoRetirada(inicial.id)),snap=>{
+    const unsubRetirada=onSnapshot(refSolicitacaoRetirada(inicial.id),snap=>{
       setSolicitacaoRetirada(snap.exists()?{id:snap.id,...snap.data()}:null);
     },()=>setSolicitacaoRetirada(null));
-    const unsubContestacao=onSnapshot(doc(db,'interacoesEncomendas',idContestacaoEncomenda(inicial.id)),snap=>{
+    const unsubContestacao=onSnapshot(refContestacaoEncomenda(inicial.id),snap=>{
       setContestacao(snap.exists()?{id:snap.id,...snap.data()}:null);
     },()=>setContestacao(null));
     return()=>{unsubEncomenda();unsubRetirada();unsubContestacao();};
@@ -60,34 +60,28 @@ export default function Detalhes({route,navigation}:any){
     try{
       setLoading(true);
       const alterou=await registrarRetirada(encomenda,perfil);
-      if(!alterou){
-        Alert.alert('Retirada','Esta encomenda já não está pendente.');
-        return;
-      }
+      if(!alterou){Alert.alert('Retirada','Esta encomenda já não está pendente.');return;}
       await confirmarSolicitacaoRetirada(encomenda.id,perfil).catch(()=>false);
       Alert.alert('Retirada registrada',retiradaSolicitada?'A solicitação do morador foi confirmada e ele foi avisado.':'A retirada foi registrada pela portaria e o morador foi avisado.');
-    }catch(e:any){
-      Alert.alert('Erro',e?.message||'Não foi possível registrar a retirada.');
-    }finally{setLoading(false);}
+    }catch(e:any){Alert.alert('Erro',e?.message||'Não foi possível registrar a retirada.');}
+    finally{setLoading(false);}
   }
 
   function informarRetirada(){
     if(!ehMorador||retiradaSolicitada||retiradaConfirmada)return;
-    Alert.alert(
-      'Informar retirada?',
-      'A portaria receberá um aviso e precisará confirmar a retirada no sistema.',
-      [
-        {text:'Cancelar',style:'cancel'},
-        {text:'Sim, já retirei',onPress:async()=>{
-          try{
-            setLoading(true);
-            const criou=await solicitarConfirmacaoRetirada(encomenda,perfil);
-            Alert.alert(criou?'Portaria avisada':'Solicitação já enviada',criou?'Sua retirada foi informada. Agora aguarde a confirmação da portaria.':'A portaria já recebeu sua solicitação de retirada.');
-          }catch(e:any){Alert.alert('Não foi possível informar',e?.message||'Tente novamente.');}
-          finally{setLoading(false);}
-        }},
-      ],
-    );
+    Alert.alert('Informar retirada?','A portaria receberá um aviso e precisará confirmar a retirada no sistema.',[
+      {text:'Cancelar',style:'cancel'},
+      {text:'Sim, já retirei',onPress:async()=>{
+        try{
+          setLoading(true);
+          await solicitarConfirmacaoRetirada(encomenda,perfil);
+          Alert.alert('Portaria avisada','Sua retirada foi informada. Agora aguarde a confirmação da portaria.');
+        }catch(e:any){
+          const codigo=String(e?.code||'');
+          Alert.alert('Não foi possível informar',codigo.includes('permission-denied')?'Esta solicitação já pode ter sido enviada ou as regras do Firestore ainda não foram publicadas. Atualize as regras e tente novamente.':e?.message||'Tente novamente.');
+        }finally{setLoading(false);}
+      }},
+    ]);
   }
 
   function contestar(){
@@ -102,10 +96,12 @@ export default function Detalhes({route,navigation}:any){
       {text:'Enviar contestação',style:'destructive',onPress:async()=>{
         try{
           setLoading(true);
-          const criou=await contestarEncomenda(encomenda,perfil,tipo);
-          Alert.alert(criou?'Contestação enviada':'Contestação já existente',criou?'A portaria foi notificada e a contestação ficou registrada no sistema.':'Esta encomenda já possui uma contestação registrada.');
-        }catch(e:any){Alert.alert('Não foi possível contestar',e?.message||'Tente novamente.');}
-        finally{setLoading(false);}
+          await contestarEncomenda(encomenda,perfil,tipo);
+          Alert.alert('Contestação enviada','A portaria foi notificada e a contestação ficou registrada no sistema.');
+        }catch(e:any){
+          const codigo=String(e?.code||'');
+          Alert.alert('Não foi possível contestar',codigo.includes('permission-denied')?'Esta contestação já pode ter sido registrada ou as regras do Firestore ainda não foram publicadas.':e?.message||'Tente novamente.');
+        }finally{setLoading(false);}
       }},
     ]);
   }
