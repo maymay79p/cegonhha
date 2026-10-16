@@ -85,7 +85,6 @@ service cloud.firestore {
     function avisoInteracaoEncomendaValidoParaPortaria() {
       return morador()
         && request.resource.data.tipo in ['retirada_solicitada', 'contestacao_encomenda']
-        && request.resource.data.moradorId == request.auth.uid
         && mesmoCondominio(request.resource.data.condominioId)
         && request.resource.data.encomendaId is string
         && request.resource.data.encomendaId.size() > 0
