@@ -40,17 +40,18 @@ export default function OCRHistorico({ navigation }: any) {
 
   return <View style={styles.container}>
     <View style={styles.header}><TouchableOpacity style={styles.back} onPress={() => navigation.goBack()}><Ionicons name="arrow-back" size={21} color={colors.text} /></TouchableOpacity><View style={{ flex: 1 }}><Text style={styles.eyebrow}>PORTARIA</Text><Text style={styles.title}>Histórico do OCR</Text></View></View>
+    <Text style={styles.privacy}>Somente leituras usadas para confirmar uma encomenda aparecem aqui. Fotos e texto bruto das etiquetas não são armazenados.</Text>
     <View style={styles.search}><Ionicons name="search-outline" size={19} color={colors.muted} /><TextInput style={styles.searchInput} placeholder="Nome, CPF, bloco ou apartamento" value={busca} onChangeText={setBusca} /></View>
     {loading ? <LoadingCards /> : <FlatList
       data={exibidos}
       keyExtractor={item => item.id}
       contentContainerStyle={{ paddingTop: 12, paddingBottom: 40 }}
-      ListEmptyComponent={<EmptyState icon="scan-outline" title="Nenhuma leitura registrada" text="As leituras feitas pela portaria aparecerão aqui, mesmo antes da confirmação da encomenda." />}
+      ListEmptyComponent={<EmptyState icon="scan-outline" title="Nenhuma leitura confirmada" text="Quando uma encomenda for confirmada a partir do OCR, apenas os principais dados extraídos aparecerão aqui." />}
       renderItem={({ item }) => <View style={styles.card}>
         <View style={styles.top}><Text style={styles.name}>{item.nomeDetectado || 'Nome não identificado'}</Text><Text style={styles.score}>{Math.round((item.topScore || 0) * 100)}%</Text></View>
         <Text style={styles.meta}>CPF: {item.cpfDetectado || '—'}</Text>
         <Text style={styles.meta}>Bloco {item.blocoDetectado || '—'} · Ap. {item.apartamentoDetectado || '—'}</Text>
-        <View style={[styles.status,item.confirmado?styles.statusOk:styles.statusPending]}><Ionicons name={item.confirmado?'checkmark-circle-outline':'time-outline'} size={15} color={item.confirmado?colors.success:colors.warning}/><Text style={[styles.statusText,{color:item.confirmado?colors.success:colors.warning}]}>{item.confirmado ? `Confirmada para ${item.moradorConfirmadoNome || 'morador'}` : 'Aguardando confirmação'}</Text></View>
+        <View style={[styles.status,styles.statusOk]}><Ionicons name="checkmark-circle-outline" size={15} color={colors.success}/><Text style={[styles.statusText,{color:colors.success}]}>{`Confirmada para ${item.moradorConfirmadoNome || 'morador'}`}</Text></View>
         <Text style={styles.date}>{item.criadoEm?.toDate?.().toLocaleString('pt-BR') || ''}{item.porteiroNome ? ` · ${item.porteiroNome}` : ''}</Text>
       </View>}
     />}
@@ -58,5 +59,5 @@ export default function OCRHistorico({ navigation }: any) {
 }
 
 function makeStyles(colors:ThemeColors){return StyleSheet.create({
-  container:{flex:1,padding:20,backgroundColor:colors.background},header:{flexDirection:'row',gap:12,alignItems:'center',marginBottom:14},back:{width:42,height:42,borderRadius:21,alignItems:'center',justifyContent:'center',backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.7,color:colors.porter},title:{fontSize:31,fontWeight:'700'},search:{height:50,borderRadius:radius.pill,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,flexDirection:'row',alignItems:'center',paddingHorizontal:15},searchInput:{flex:1,paddingHorizontal:9},card:{backgroundColor:colors.surface,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,padding:15,marginBottom:9},top:{flexDirection:'row',justifyContent:'space-between',gap:8},name:{fontSize:19,fontWeight:'700',flex:1},score:{fontSize:18,fontWeight:'700',color:colors.success},meta:{fontSize:14,color:colors.muted,marginTop:3},status:{alignSelf:'flex-start',flexDirection:'row',alignItems:'center',gap:5,paddingHorizontal:9,paddingVertical:6,borderRadius:radius.pill,marginTop:9},statusOk:{backgroundColor:colors.surfaceSoft},statusPending:{backgroundColor:colors.surfaceSoft},statusText:{fontSize:12,fontWeight:'700'},date:{fontSize:12,color:colors.muted,marginTop:8}
+  container:{flex:1,padding:20,backgroundColor:colors.background},header:{flexDirection:'row',gap:12,alignItems:'center',marginBottom:8},back:{width:42,height:42,borderRadius:21,alignItems:'center',justifyContent:'center',backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.7,color:colors.porter},title:{fontSize:31,fontWeight:'700'},privacy:{fontSize:13,lineHeight:18,color:colors.muted,marginBottom:12},search:{height:50,borderRadius:radius.pill,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,flexDirection:'row',alignItems:'center',paddingHorizontal:15},searchInput:{flex:1,paddingHorizontal:9},card:{backgroundColor:colors.surface,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,padding:15,marginBottom:9},top:{flexDirection:'row',justifyContent:'space-between',gap:8},name:{fontSize:19,fontWeight:'700',flex:1},score:{fontSize:18,fontWeight:'700',color:colors.success},meta:{fontSize:14,color:colors.muted,marginTop:3},status:{alignSelf:'flex-start',flexDirection:'row',alignItems:'center',gap:5,paddingHorizontal:9,paddingVertical:6,borderRadius:radius.pill,marginTop:9},statusOk:{backgroundColor:colors.surfaceSoft},statusText:{fontSize:12,fontWeight:'700'},date:{fontSize:12,color:colors.muted,marginTop:8}
 });}
