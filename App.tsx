@@ -35,6 +35,7 @@ import CodigoCondominio from './Screens/CodigoCondominio';
 import { RootStackParamList } from './types';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { useTabBadges } from './hooks/useTabBadges';
 import { AppText } from './components/AppText';
 import { fonts, shadow, ThemeColors } from './theme';
 
@@ -91,9 +92,27 @@ function tabBarStyle(bottom: number, colors: ThemeColors) {
   };
 }
 
+function badgeOptions(count: number, color: string) {
+  if (count <= 0) return {};
+  return {
+    tabBarBadge: count > 99 ? '99+' : count,
+    tabBarBadgeStyle: {
+      backgroundColor: color,
+      color: '#fff',
+      fontFamily: fonts.semiBold,
+      fontSize: 10,
+      minWidth: 18,
+      height: 18,
+      lineHeight: 18,
+      borderRadius: 9,
+    },
+  };
+}
+
 function MoradorTabs() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const { avisosNaoLidos, muralNovos } = useTabBadges();
   return (
     <MoradorTab.Navigator id="MoradorTabs" screenOptions={({ route }) => ({
       headerShown: false,
@@ -107,9 +126,9 @@ function MoradorTabs() {
     })}>
       <MoradorTab.Screen name="Inicio" component={MoradorHome} options={{ title: 'Início' }} />
       <MoradorTab.Screen name="MinhasEncomendas" component={MoradorEncomendas} options={{ title: 'Entregas' }} />
-      <MoradorTab.Screen name="Mural" component={Mural} options={{ title: 'Mural' }} />
+      <MoradorTab.Screen name="Mural" component={Mural} options={{ title: 'Mural', ...badgeOptions(muralNovos, colors.accent) }} />
       <MoradorTab.Screen name="Previsoes" component={Previsoes} options={{ title: 'Esperadas' }} />
-      <MoradorTab.Screen name="Notificacoes" component={Notificacoes} options={{ title: 'Avisos' }} />
+      <MoradorTab.Screen name="Notificacoes" component={Notificacoes} options={{ title: 'Avisos', ...badgeOptions(avisosNaoLidos, colors.accent) }} />
       <MoradorTab.Screen name="Perfil" component={Perfil} options={{ title: 'Perfil' }} />
     </MoradorTab.Navigator>
   );
@@ -118,6 +137,7 @@ function MoradorTabs() {
 function PorteiroTabs() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const { avisosNaoLidos, muralNovos } = useTabBadges();
   return (
     <PorteiroTab.Navigator id="PorteiroTabs" screenOptions={({ route }) => ({
       headerShown: false,
@@ -132,8 +152,8 @@ function PorteiroTabs() {
       <PorteiroTab.Screen name="Painel" component={PorteiroHome} options={{ title: 'Painel' }} />
       <PorteiroTab.Screen name="Encomendas" component={PorteiroEncomendas} options={{ title: 'Entregas' }} />
       <PorteiroTab.Screen name="OCR" component={OCR} options={{ title: 'Leitura' }} />
-      <PorteiroTab.Screen name="Mural" component={Mural} options={{ title: 'Mural' }} />
-      <PorteiroTab.Screen name="Notificacoes" component={Notificacoes} options={{ title: 'Avisos' }} />
+      <PorteiroTab.Screen name="Mural" component={Mural} options={{ title: 'Mural', ...badgeOptions(muralNovos, colors.porter) }} />
+      <PorteiroTab.Screen name="Notificacoes" component={Notificacoes} options={{ title: 'Avisos', ...badgeOptions(avisosNaoLidos, colors.porter) }} />
       <PorteiroTab.Screen name="Perfil" component={Perfil} options={{ title: 'Perfil' }} />
     </PorteiroTab.Navigator>
   );
