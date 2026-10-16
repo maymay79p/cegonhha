@@ -26,6 +26,7 @@ import MoradorEncomendas from './Screens/MoradorEncomendas';
 import PorteiroHome from './Screens/PorteiroHome';
 import PorteiroEncomendas from './Screens/PorteiroEncomendas';
 import SolicitacoesCondominio from './Screens/SolicitacoesCondominio';
+import PessoasCondominio from './Screens/PessoasCondominio';
 import Privacidade from './Screens/Privacidade';
 import Onboarding from './Screens/Onboarding';
 import Mural from './Screens/Mural';
@@ -189,6 +190,7 @@ function RootNavigator() {
       <Stack.Screen name="Perfil" component={Perfil} />
       {perfil.tipo === 'morador' && <Stack.Screen name="Previsoes" component={Previsoes} />}
       {perfil.tipo === 'porteiro' && <Stack.Screen name="SolicitacoesCondominio" component={SolicitacoesCondominio} />}
+      <Stack.Screen name="PessoasCondominio" component={PessoasCondominio} />
       <Stack.Screen name="Privacidade" component={Privacidade} />
       <Stack.Screen name="Mural" component={Mural} />
       <Stack.Screen name="Condominio" component={Condominio} />
