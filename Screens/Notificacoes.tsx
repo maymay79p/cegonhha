@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { arrayUnion, collection, doc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
+import { arrayUnion, collection, doc, getDoc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -9,7 +9,7 @@ import { AppText as Text } from '../components/AppText';
 import { EmptyState, LoadingCards } from '../components/States';
 import { radius, ThemeColors } from '../theme';
 
-export default function Notificacoes(){
+export default function Notificacoes({navigation}:any){
   const {user,perfil}=useAuth();
   const {colors}=useTheme();
   const styles=useMemo(()=>makeStyles(colors),[colors]);
@@ -19,16 +19,8 @@ export default function Notificacoes(){
   const ehPortaria=perfil?.tipo==='porteiro';
 
   useEffect(()=>{
-    if(!user||!perfil){
-      setItens([]);
-      setLoading(false);
-      return;
-    }
-    if(ehPortaria&&!perfil.condominioId){
-      setItens([]);
-      setLoading(false);
-      return;
-    }
+    if(!user||!perfil){setItens([]);setLoading(false);return;}
+    if(ehPortaria&&!perfil.condominioId){setItens([]);setLoading(false);return;}
     setLoading(true);
     const q=ehPortaria
       ? query(collection(db,'notificacoes'),where('condominioId','==',perfil.condominioId),where('destinatarioTipo','==','porteiro'))
@@ -53,12 +45,20 @@ export default function Notificacoes(){
 
   async function marcarLida(item:any){
     if(!user||estaLida(item))return;
+    if(ehPortaria)await updateDoc(doc(db,'notificacoes',item.id),{lidaPor:arrayUnion(user.uid)});
+    else await updateDoc(doc(db,'notificacoes',item.id),{lida:true});
+  }
+
+  async function abrirAviso(item:any){
     try{
-      if(ehPortaria)await updateDoc(doc(db,'notificacoes',item.id),{lidaPor:arrayUnion(user.uid)});
-      else await updateDoc(doc(db,'notificacoes',item.id),{lida:true});
+      if(!estaLida(item))await marcarLida(item);
+      if(item.encomendaId){
+        const snap=await getDoc(doc(db,'encomendas',String(item.encomendaId)));
+        if(snap.exists())navigation.navigate('Detalhes',{encomenda:{id:snap.id,...snap.data()}});
+      }
     }catch(e:any){
       const codigo=String(e?.code||'');
-      Alert.alert('Notificações',codigo.includes('permission-denied')?'O Firestore bloqueou esta atualização. Publique as regras mais recentes do Cegonha.':e?.message||'Não foi possível marcar o aviso como lido.');
+      Alert.alert('Notificações',codigo.includes('permission-denied')?'O Firestore bloqueou esta ação. Publique as regras mais recentes do Cegonha.':e?.message||'Não foi possível abrir este aviso.');
     }
   }
 
@@ -71,9 +71,7 @@ export default function Notificacoes(){
         ? updateDoc(doc(db,'notificacoes',item.id),{lidaPor:arrayUnion(user.uid)})
         : updateDoc(doc(db,'notificacoes',item.id),{lida:true})
       ));
-    }catch(e:any){
-      Alert.alert('Notificações',e?.message||'Não foi possível marcar todos os avisos como lidos.');
-    }
+    }catch(e:any){Alert.alert('Notificações',e?.message||'Não foi possível marcar todos os avisos como lidos.');}
   }
 
   const exibidos=useMemo(()=>soNaoLidas?itens.filter(i=>!estaLida(i)):itens,[itens,soNaoLidas,ehPortaria,user?.uid]);
@@ -82,6 +80,8 @@ export default function Notificacoes(){
   function icon(tipo:string){
     if(tipo==='chegada')return'cube-outline';
     if(tipo==='retirada')return'checkmark-circle-outline';
+    if(tipo==='retirada_solicitada')return'hand-right-outline';
+    if(tipo==='contestacao_encomenda')return'alert-circle-outline';
     if(tipo==='lembrete')return'time-outline';
     if(tipo==='vinculo'||tipo==='solicitacao_vinculo')return'people-outline';
     if(tipo==='previsao')return'time-outline';
@@ -90,7 +90,7 @@ export default function Notificacoes(){
   }
 
   const vazio=ehPortaria
-    ? 'Novas solicitações de vínculo, entregas previstas e denúncias da comunidade aparecerão aqui.'
+    ? 'Solicitações de retirada, contestações, vínculos, entregas previstas e denúncias aparecerão aqui.'
     : 'Chegadas, retiradas, lembretes e decisões da portaria aparecerão aqui automaticamente.';
 
   return <View style={styles.container}>
@@ -99,21 +99,13 @@ export default function Notificacoes(){
       <TouchableOpacity style={[styles.filter,!soNaoLidas&&styles.active,ehPortaria&&!soNaoLidas&&{backgroundColor:colors.porter,borderColor:colors.porter}]} onPress={()=>setSoNaoLidas(false)}><Text style={[styles.filterText,!soNaoLidas&&styles.activeText]}>Todas</Text></TouchableOpacity>
       <TouchableOpacity style={[styles.filter,soNaoLidas&&styles.active,ehPortaria&&soNaoLidas&&{backgroundColor:colors.porter,borderColor:colors.porter}]} onPress={()=>setSoNaoLidas(true)}><Text style={[styles.filterText,soNaoLidas&&styles.activeText]}>Não lidas · {naoLidas}</Text></TouchableOpacity>
     </View>
-    {loading?<LoadingCards/>:<FlatList
-      data={exibidos}
-      keyExtractor={item=>item.id}
-      contentContainerStyle={styles.list}
-      showsVerticalScrollIndicator={false}
-      ListEmptyComponent={<EmptyState icon="notifications-off-outline" title="Sem avisos" text={vazio}/>} 
-      renderItem={({item})=>{
-        const lida=estaLida(item);
-        const destaque=ehPortaria?colors.porter:colors.accent;
-        return <TouchableOpacity style={[styles.card,!lida&&styles.unread,!lida&&ehPortaria&&{borderColor:colors.porter,backgroundColor:colors.porterSoft}]} onPress={()=>!lida&&marcarLida(item)}>
-          <View style={[styles.icon,!lida&&styles.iconUnread]}><Ionicons name={icon(item.tipo) as any} size={21} color={!lida?destaque:colors.muted}/></View>
-          <View style={{flex:1}}><Text style={styles.message}>{item.mensagem}</Text>{!!item.remetenteNome&&ehPortaria&&<Text style={styles.sender}>Enviado por {item.remetenteNome}</Text>}<Text style={styles.date}>{item.criadaEm?.toDate?.().toLocaleString('pt-BR')||''}</Text>{!lida&&<Text style={[styles.hint,{color:destaque}]}>Novo</Text>}</View>
-        </TouchableOpacity>;
-      }}
-    />}
+    {loading?<LoadingCards/>:<FlatList data={exibidos} keyExtractor={item=>item.id} contentContainerStyle={styles.list} showsVerticalScrollIndicator={false} ListEmptyComponent={<EmptyState icon="notifications-off-outline" title="Sem avisos" text={vazio}/>} renderItem={({item})=>{
+      const lida=estaLida(item);const destaque=ehPortaria?colors.porter:colors.accent;
+      return <TouchableOpacity style={[styles.card,!lida&&styles.unread,!lida&&ehPortaria&&{borderColor:colors.porter,backgroundColor:colors.porterSoft}]} onPress={()=>abrirAviso(item)}>
+        <View style={[styles.icon,!lida&&styles.iconUnread]}><Ionicons name={icon(item.tipo) as any} size={21} color={!lida?destaque:colors.muted}/></View>
+        <View style={{flex:1}}><Text style={styles.message}>{item.mensagem}</Text>{!!item.remetenteNome&&ehPortaria&&<Text style={styles.sender}>Enviado por {item.remetenteNome}</Text>}<Text style={styles.date}>{item.criadaEm?.toDate?.().toLocaleString('pt-BR')||''}</Text>{!lida&&<Text style={[styles.hint,{color:destaque}]}>Novo</Text>}{!!item.encomendaId&&<Text style={[styles.hint,{color:destaque}]}>Toque para abrir a encomenda</Text>}</View>
+      </TouchableOpacity>;
+    }}/>} 
   </View>;
 }
 
