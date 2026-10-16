@@ -89,13 +89,12 @@ service cloud.firestore {
         && mesmoCondominio(request.resource.data.condominioId)
         && request.resource.data.encomendaId is string
         && request.resource.data.encomendaId.size() > 0
-        && request.resource.data.referenciaId is string
-        && request.resource.data.referenciaId.size() > 0
-        && existsAfter(/databases/$(database)/documents/interacoesEncomendas/$(request.resource.data.referenciaId))
-        && getAfter(/databases/$(database)/documents/interacoesEncomendas/$(request.resource.data.referenciaId)).data.tipo == request.resource.data.tipo
-        && getAfter(/databases/$(database)/documents/interacoesEncomendas/$(request.resource.data.referenciaId)).data.moradorId == request.auth.uid
-        && getAfter(/databases/$(database)/documents/interacoesEncomendas/$(request.resource.data.referenciaId)).data.encomendaId == request.resource.data.encomendaId
-        && getAfter(/databases/$(database)/documents/interacoesEncomendas/$(request.resource.data.referenciaId)).data.condominioId == request.resource.data.condominioId;
+        && request.resource.data.referenciaId in ['retirada', 'contestacao']
+        && existsAfter(/databases/$(database)/documents/encomendas/$(request.resource.data.encomendaId)/interacoes/$(request.resource.data.referenciaId))
+        && getAfter(/databases/$(database)/documents/encomendas/$(request.resource.data.encomendaId)/interacoes/$(request.resource.data.referenciaId)).data.tipo == request.resource.data.tipo
+        && getAfter(/databases/$(database)/documents/encomendas/$(request.resource.data.encomendaId)/interacoes/$(request.resource.data.referenciaId)).data.moradorId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/encomendas/$(request.resource.data.encomendaId)/interacoes/$(request.resource.data.referenciaId)).data.encomendaId == request.resource.data.encomendaId
+        && getAfter(/databases/$(database)/documents/encomendas/$(request.resource.data.encomendaId)/interacoes/$(request.resource.data.referenciaId)).data.condominioId == request.resource.data.condominioId;
     }
 
     match /condominios/{condominioId} {
@@ -203,28 +202,34 @@ service cloud.firestore {
       );
     }
 
-    match /interacoesEncomendas/{id} {
+    match /encomendas/{encomendaId}/interacoes/{interacaoId} {
       allow create: if morador()
+        && exists(/databases/$(database)/documents/encomendas/$(encomendaId))
+        && get(/databases/$(database)/documents/encomendas/$(encomendaId)).data.moradorId == request.auth.uid
+        && request.resource.data.encomendaId == encomendaId
         && request.resource.data.moradorId == request.auth.uid
+        && request.resource.data.condominioId == get(/databases/$(database)/documents/encomendas/$(encomendaId)).data.condominioId
         && mesmoCondominio(request.resource.data.condominioId)
-        && request.resource.data.encomendaId is string
-        && request.resource.data.encomendaId.size() > 0
-        && exists(/databases/$(database)/documents/encomendas/$(request.resource.data.encomendaId))
-        && get(/databases/$(database)/documents/encomendas/$(request.resource.data.encomendaId)).data.moradorId == request.auth.uid
-        && get(/databases/$(database)/documents/encomendas/$(request.resource.data.encomendaId)).data.condominioId == request.resource.data.condominioId
         && (
-          (request.resource.data.tipo == 'retirada_solicitada' && request.resource.data.status == 'pendente') ||
-          (request.resource.data.tipo == 'contestacao_encomenda'
+          (interacaoId == 'retirada'
+            && request.resource.data.tipo == 'retirada_solicitada'
+            && request.resource.data.status == 'pendente'
+            && get(/databases/$(database)/documents/encomendas/$(encomendaId)).data.status == 'pendente') ||
+          (interacaoId == 'contestacao'
+            && request.resource.data.tipo == 'contestacao_encomenda'
             && request.resource.data.status == 'aberta'
             && request.resource.data.contestacaoTipo in ['nao_reconheco', 'nao_retirei'])
         );
 
-      allow read: if logado() && (
-        (morador() && resource.data.moradorId == request.auth.uid) ||
-        (porteiro() && mesmoCondominio(resource.data.condominioId))
-      );
+      allow read: if logado()
+        && exists(/databases/$(database)/documents/encomendas/$(encomendaId))
+        && (
+          (morador() && get(/databases/$(database)/documents/encomendas/$(encomendaId)).data.moradorId == request.auth.uid) ||
+          (porteiro() && mesmoCondominio(get(/databases/$(database)/documents/encomendas/$(encomendaId)).data.condominioId))
+        );
 
       allow update: if porteiro()
+        && interacaoId == 'retirada'
         && mesmoCondominio(resource.data.condominioId)
         && resource.data.tipo == 'retirada_solicitada'
         && resource.data.status == 'pendente'
