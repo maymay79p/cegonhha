@@ -18,8 +18,29 @@ function agoraISO() {
   return new Date().toISOString();
 }
 
-function evento(tipo: HistoricoEvento['tipo'], titulo: string, atorId?: string, atorNome?: string, observacao?: string): HistoricoEvento {
-  return { tipo, titulo, data: agoraISO(), atorId, atorNome, observacao };
+function textoSeguro(valor: unknown) {
+  return typeof valor === 'string' ? valor : valor == null ? '' : String(valor);
+}
+
+function evento(
+  tipo: HistoricoEvento['tipo'],
+  titulo: string,
+  atorId?: string,
+  atorNome?: string,
+  observacao?: string,
+): HistoricoEvento {
+  const item: HistoricoEvento = {
+    tipo,
+    titulo,
+    data: agoraISO(),
+  };
+
+  // Firestore rejeita `undefined`, inclusive dentro de objetos em arrays.
+  // Só adicionamos os campos opcionais quando eles realmente possuem valor.
+  if (atorId) item.atorId = atorId;
+  if (atorNome) item.atorNome = atorNome;
+  if (observacao) item.observacao = observacao;
+  return item;
 }
 
 export type ResultadoRegistroChegada = {
@@ -52,9 +73,11 @@ export async function registrarChegada({ perfil, morador, descricao, ocrMeta, pr
   ocrMeta?: OCRMeta;
   previsao?: any;
 }): Promise<ResultadoRegistroChegada> {
-  const uidAtual = auth.currentUser?.uid || perfil?.id || '';
-  const condominioAtual = perfil?.condominioId || '';
-  const descricaoLimpa = descricao.trim();
+  const uidAtual = textoSeguro(auth.currentUser?.uid || perfil?.id).trim();
+  const condominioAtual = textoSeguro(perfil?.condominioId).trim();
+  const nomePorteiro = textoSeguro(perfil?.nome).trim();
+  const nomeMorador = textoSeguro(morador?.nome).trim();
+  const descricaoLimpa = textoSeguro(descricao).trim();
 
   if (!uidAtual || !condominioAtual) throw new Error('Sua conta de portaria está sem condomínio vinculado. Faça logout e login novamente.');
   if (perfil?.tipo !== 'porteiro') throw new Error('Apenas a portaria pode registrar encomendas.');
@@ -74,30 +97,30 @@ export async function registrarChegada({ perfil, morador, descricao, ocrMeta, pr
       tipo: 'prevista',
       titulo: 'Prevista pelo morador',
       data: previsao.criadaEm?.toDate?.()?.toISOString?.() || agoraISO(),
-      atorId: morador.id,
-      atorNome: morador.nome,
-      observacao: previsao.descricao || '',
+      atorId: textoSeguro(morador.id),
+      atorNome: nomeMorador,
+      observacao: textoSeguro(previsao.descricao),
     });
   }
-  historico.push(evento('recebida', 'Recebida pela portaria', uidAtual, perfil.nome));
-  historico.push(evento('pendente', 'Aguardando retirada', uidAtual, perfil.nome));
+  historico.push(evento('recebida', 'Recebida pela portaria', uidAtual, nomePorteiro));
+  historico.push(evento('pendente', 'Aguardando retirada', uidAtual, nomePorteiro));
 
   // A foto e o texto bruto do OCR nunca são persistidos. A encomenda guarda
   // somente a origem e a pontuação de correspondência, quando houver OCR.
   await setDoc(encomendaRef, {
-    moradorId: morador.id,
-    moradorNome: morador.nome,
-    bloco: morador.bloco || '',
-    apartamento: morador.apartamento || '',
-    descricao: descricaoLimpa || previsao?.descricao || '',
-    ocrScore: ocrMeta?.topScore || 0,
+    moradorId: textoSeguro(morador.id),
+    moradorNome: nomeMorador,
+    bloco: textoSeguro(morador.bloco),
+    apartamento: textoSeguro(morador.apartamento),
+    descricao: descricaoLimpa || textoSeguro(previsao?.descricao),
+    ocrScore: Number(ocrMeta?.topScore || 0),
     origem: ocrMeta ? 'ocr' : 'manual',
     status: 'pendente',
     porteiroId: uidAtual,
-    porteiroNome: perfil.nome,
+    porteiroNome: nomePorteiro,
     condominioId: condominioAtual,
     codigoReferencia: encomendaRef.id.slice(0, 8).toUpperCase(),
-    previsaoId: previsao?.id || '',
+    previsaoId: textoSeguro(previsao?.id),
     recebidaEm: serverTimestamp(),
     retiradaEm: null,
     historico,
@@ -110,7 +133,7 @@ export async function registrarChegada({ perfil, morador, descricao, ocrMeta, pr
   try {
     await setDoc(notificacaoRef, {
       destinatarioTipo: 'morador',
-      moradorId: morador.id,
+      moradorId: textoSeguro(morador.id),
       condominioId: condominioAtual,
       encomendaId: encomendaRef.id,
       referenciaId: encomendaRef.id,
@@ -131,9 +154,9 @@ export async function registrarChegada({ perfil, morador, descricao, ocrMeta, pr
     setDoc(auditoriaRef, {
       encomendaId: encomendaRef.id,
       condominioId: condominioAtual,
-      moradorId: morador.id,
+      moradorId: textoSeguro(morador.id),
       atorId: uidAtual,
-      atorNome: perfil.nome,
+      atorNome: nomePorteiro,
       acao: 'chegada_registrada',
       criadoEm: serverTimestamp(),
     }),
@@ -144,21 +167,21 @@ export async function registrarChegada({ perfil, morador, descricao, ocrMeta, pr
     tarefasAuxiliares.push(setDoc(leituraRef, {
       condominioId: condominioAtual,
       porteiroId: uidAtual,
-      porteiroNome: perfil.nome || '',
+      porteiroNome: nomePorteiro,
       motorOCR: 'ocr-space',
-      tipoTexto: ocrMeta.tipoTexto,
-      iluminacao: ocrMeta.iluminacao,
-      tempoMs: ocrMeta.tempoMs,
-      nomeDetectado: ocrMeta.nomeDetectado || '',
-      cpfDetectado: ocrMeta.cpfDetectado || '',
-      blocoDetectado: ocrMeta.blocoDetectado || '',
-      apartamentoDetectado: ocrMeta.apartamentoDetectado || '',
-      topCandidatoId: ocrMeta.topCandidatoId || '',
-      topScore: ocrMeta.topScore || 0,
+      tipoTexto: textoSeguro(ocrMeta.tipoTexto),
+      iluminacao: textoSeguro(ocrMeta.iluminacao),
+      tempoMs: Number(ocrMeta.tempoMs || 0),
+      nomeDetectado: textoSeguro(ocrMeta.nomeDetectado),
+      cpfDetectado: textoSeguro(ocrMeta.cpfDetectado),
+      blocoDetectado: textoSeguro(ocrMeta.blocoDetectado),
+      apartamentoDetectado: textoSeguro(ocrMeta.apartamentoDetectado),
+      topCandidatoId: textoSeguro(ocrMeta.topCandidatoId),
+      topScore: Number(ocrMeta.topScore || 0),
       confirmado: true,
       encomendaId: encomendaRef.id,
-      moradorConfirmadoId: morador.id,
-      moradorConfirmadoNome: morador.nome || '',
+      moradorConfirmadoId: textoSeguro(morador.id),
+      moradorConfirmadoNome: nomeMorador,
       confirmadoEm: serverTimestamp(),
       criadoEm: serverTimestamp(),
     }));
@@ -167,24 +190,24 @@ export async function registrarChegada({ perfil, morador, descricao, ocrMeta, pr
     tarefasAuxiliares.push(setDoc(testeRef, {
       condominioId: condominioAtual,
       porteiroId: uidAtual,
-      porteiroNome: perfil.nome || '',
+      porteiroNome: nomePorteiro,
       encomendaId: encomendaRef.id,
-      tipoTexto: ocrMeta.tipoTexto,
-      iluminacao: ocrMeta.iluminacao,
-      tempoMs: ocrMeta.tempoMs,
-      topCandidatoId: ocrMeta.topCandidatoId || '',
-      topScore: ocrMeta.topScore || 0,
-      moradorConfirmadoId: morador.id,
-      moradorConfirmadoNome: morador.nome || '',
+      tipoTexto: textoSeguro(ocrMeta.tipoTexto),
+      iluminacao: textoSeguro(ocrMeta.iluminacao),
+      tempoMs: Number(ocrMeta.tempoMs || 0),
+      topCandidatoId: textoSeguro(ocrMeta.topCandidatoId),
+      topScore: Number(ocrMeta.topScore || 0),
+      moradorConfirmadoId: textoSeguro(morador.id),
+      moradorConfirmadoNome: nomeMorador,
       acertoTop1: !!ocrMeta.topCandidatoId && ocrMeta.topCandidatoId === morador.id,
-      nomeDetectado: ocrMeta.nomeDetectado || '',
-      cpfDetectado: ocrMeta.cpfDetectado || '',
-      blocoDetectado: ocrMeta.blocoDetectado || '',
-      apartamentoDetectado: ocrMeta.apartamentoDetectado || '',
-      reconheceuNome: ocrMeta.reconheceuNome,
-      reconheceuCpf: ocrMeta.reconheceuCpf,
-      reconheceuBloco: ocrMeta.reconheceuBloco,
-      reconheceuApartamento: ocrMeta.reconheceuApartamento,
+      nomeDetectado: textoSeguro(ocrMeta.nomeDetectado),
+      cpfDetectado: textoSeguro(ocrMeta.cpfDetectado),
+      blocoDetectado: textoSeguro(ocrMeta.blocoDetectado),
+      apartamentoDetectado: textoSeguro(ocrMeta.apartamentoDetectado),
+      reconheceuNome: Boolean(ocrMeta.reconheceuNome),
+      reconheceuCpf: Boolean(ocrMeta.reconheceuCpf),
+      reconheceuBloco: Boolean(ocrMeta.reconheceuBloco),
+      reconheceuApartamento: Boolean(ocrMeta.reconheceuApartamento),
       criadoEm: serverTimestamp(),
     }));
   }
@@ -204,6 +227,8 @@ export async function registrarRetirada(encomenda: Encomenda, perfil: any) {
   const encomendaRef = doc(db, 'encomendas', encomenda.id);
   const notificacaoRef = doc(collection(db, 'notificacoes'));
   const auditoriaRef = doc(collection(db, 'auditoria'));
+  const nomePorteiro = textoSeguro(perfil?.nome).trim();
+  const porteiroId = textoSeguro(perfil?.id || auth.currentUser?.uid).trim();
 
   return runTransaction(db, async transaction => {
     const snap = await transaction.get(encomendaRef);
@@ -212,18 +237,18 @@ export async function registrarRetirada(encomenda: Encomenda, perfil: any) {
     if (atual.condominioId !== perfil.condominioId) throw new Error('Esta encomenda não pertence ao condomínio da portaria.');
     if (atual.status !== 'pendente') return false;
 
-    const ev = evento('retirada', 'Retirada registrada', perfil.id, perfil.nome);
+    const ev = evento('retirada', 'Retirada registrada', porteiroId, nomePorteiro);
     transaction.update(encomendaRef, {
       status: 'retirada',
       retiradaEm: serverTimestamp(),
-      retiradaPorId: perfil.id,
-      retiradaPorNome: perfil.nome,
+      retiradaPorId: porteiroId,
+      retiradaPorNome: nomePorteiro,
       historico: arrayUnion(ev),
     });
     transaction.set(notificacaoRef, {
       destinatarioTipo: 'morador',
-      moradorId: atual.moradorId,
-      condominioId: atual.condominioId,
+      moradorId: textoSeguro(atual.moradorId),
+      condominioId: textoSeguro(atual.condominioId),
       encomendaId: atual.id,
       referenciaId: atual.id,
       mensagem: 'A retirada da sua encomenda foi registrada pela portaria.',
@@ -233,10 +258,10 @@ export async function registrarRetirada(encomenda: Encomenda, perfil: any) {
     });
     transaction.set(auditoriaRef, {
       encomendaId: atual.id,
-      condominioId: atual.condominioId,
-      moradorId: atual.moradorId,
-      atorId: perfil.id,
-      atorNome: perfil.nome,
+      condominioId: textoSeguro(atual.condominioId),
+      moradorId: textoSeguro(atual.moradorId),
+      atorId: porteiroId,
+      atorNome: nomePorteiro,
       acao: 'retirada_registrada',
       criadoEm: serverTimestamp(),
     });
@@ -249,6 +274,8 @@ export async function enviarLembreteAtrasado(encomenda: Encomenda, perfil: any) 
   const encomendaRef = doc(db, 'encomendas', encomenda.id);
   const notificacaoRef = doc(collection(db, 'notificacoes'));
   const auditoriaRef = doc(collection(db, 'auditoria'));
+  const nomePorteiro = textoSeguro(perfil?.nome).trim();
+  const porteiroId = textoSeguro(perfil?.id || auth.currentUser?.uid).trim();
 
   return runTransaction(db, async transaction => {
     const snap = await transaction.get(encomendaRef);
@@ -259,15 +286,15 @@ export async function enviarLembreteAtrasado(encomenda: Encomenda, perfil: any) 
     const recebidaEm = atual.recebidaEm?.toDate?.()?.getTime?.() || 0;
     if (!recebidaEm || Date.now() - recebidaEm < 3 * 86400000) return false;
 
-    const ev = evento('lembrete', 'Lembrete de retirada enviado', perfil.id, perfil.nome);
+    const ev = evento('lembrete', 'Lembrete de retirada enviado', porteiroId, nomePorteiro);
     transaction.update(encomendaRef, {
       lembrete3dEnviado: true,
       historico: arrayUnion(ev),
     });
     transaction.set(notificacaoRef, {
       destinatarioTipo: 'morador',
-      moradorId: atual.moradorId,
-      condominioId: atual.condominioId,
+      moradorId: textoSeguro(atual.moradorId),
+      condominioId: textoSeguro(atual.condominioId),
       encomendaId: atual.id,
       referenciaId: atual.id,
       mensagem: 'Sua encomenda está há mais de 3 dias aguardando retirada na portaria.',
@@ -277,10 +304,10 @@ export async function enviarLembreteAtrasado(encomenda: Encomenda, perfil: any) 
     });
     transaction.set(auditoriaRef, {
       encomendaId: atual.id,
-      condominioId: atual.condominioId,
-      moradorId: atual.moradorId,
-      atorId: perfil.id,
-      atorNome: perfil.nome,
+      condominioId: textoSeguro(atual.condominioId),
+      moradorId: textoSeguro(atual.moradorId),
+      atorId: porteiroId,
+      atorNome: nomePorteiro,
       acao: 'lembrete_3_dias',
       criadoEm: serverTimestamp(),
     });
