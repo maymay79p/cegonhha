@@ -145,7 +145,7 @@ export async function registrarChegada({ perfil, morador, descricao, ocrMeta, pr
       condominioId: condominioAtual,
       porteiroId: uidAtual,
       porteiroNome: perfil.nome || '',
-      motorOCR: 'google-ml-kit',
+      motorOCR: 'ocr-space',
       tipoTexto: ocrMeta.tipoTexto,
       iluminacao: ocrMeta.iluminacao,
       tempoMs: ocrMeta.tempoMs,
