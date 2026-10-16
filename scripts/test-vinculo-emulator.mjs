@@ -187,8 +187,7 @@ try {
   assert.equal(perfilFinal.data()?.condominioId, CONDOMINIO_ID, 'Perfil do morador deve ficar vinculado ao condomínio.');
   assert.equal(solicitacaoFinal.data()?.status, 'concluida', 'Solicitação deve terminar como concluída.');
 
-  // 6) A nova tela Pessoas usa exatamente esta consulta: somente usuários do
-  // condomínio atual. Morador e Portaria devem conseguir ler a mesma lista.
+  // 6) A tela Pessoas consulta somente os usuários do condomínio atual.
   const consultaPessoas = query(
     collection(db, 'usuarios'),
     where('condominioId', '==', CONDOMINIO_ID),
@@ -205,7 +204,70 @@ try {
   const pessoasComoPortaria = await getDocs(consultaPessoas);
   assert.equal(pessoasComoPortaria.size, 2, 'Portaria deve enxergar a lista de usuários do próprio condomínio.');
 
-  console.log('Fluxo de vínculo e lista de pessoas Morador ↔ Portaria validados com sucesso no Firestore Emulator.');
+  // 7) Moderação do mural: Portaria bane, o morador fica impedido de publicar,
+  // e a Portaria consegue desfazer o banimento.
+  const banimentoRef = doc(db, 'muralBanidos', `${CONDOMINIO_ID}_${moradorUid}`);
+  await setDoc(banimentoRef, {
+    usuarioId: moradorUid,
+    usuarioNome: 'Morador Teste',
+    condominioId: CONDOMINIO_ID,
+    ativo: true,
+    banidoPorId: portariaUid,
+    banidoPorNome: 'Portaria Teste',
+    atualizadoEm: serverTimestamp(),
+  }, { merge: true });
+  const banidoRegistrado = await getDoc(banimentoRef);
+  assert.equal(banidoRegistrado.data()?.ativo, true, 'Portaria deve conseguir banir um morador do mural.');
+
+  const consultaBanidos = query(collection(db, 'muralBanidos'), where('condominioId', '==', CONDOMINIO_ID));
+  const listaBanidos = await getDocs(consultaBanidos);
+  assert.equal(listaBanidos.size, 1, 'Portaria deve conseguir consultar os perfis banidos do condomínio.');
+
+  await entrar(MORADOR_EMAIL);
+  const publicacaoBloqueada = doc(collection(db, 'mural'));
+  await assert.rejects(
+    setDoc(publicacaoBloqueada, {
+      condominioId: CONDOMINIO_ID,
+      autorId: moradorUid,
+      autorNome: 'Morador Teste',
+      autorTipo: 'morador',
+      texto: 'Publicação que deve ser bloqueada enquanto o perfil está banido.',
+      criadoEm: serverTimestamp(),
+      criadoEmCliente: Date.now(),
+    }),
+    erro => String(erro?.code || '').includes('permission-denied'),
+    'Morador banido não deve conseguir publicar no mural.',
+  );
+
+  await entrar(PORTARIA_EMAIL);
+  await setDoc(banimentoRef, {
+    usuarioId: moradorUid,
+    usuarioNome: 'Morador Teste',
+    condominioId: CONDOMINIO_ID,
+    ativo: false,
+    banidoPorId: '',
+    banidoPorNome: '',
+    desbanidoPorId: portariaUid,
+    desbanidoPorNome: 'Portaria Teste',
+    atualizadoEm: serverTimestamp(),
+  }, { merge: true });
+  const desbanido = await getDoc(banimentoRef);
+  assert.equal(desbanido.data()?.ativo, false, 'Portaria deve conseguir desfazer um banimento do mural.');
+
+  await entrar(MORADOR_EMAIL);
+  const publicacaoLiberada = doc(collection(db, 'mural'));
+  await setDoc(publicacaoLiberada, {
+    condominioId: CONDOMINIO_ID,
+    autorId: moradorUid,
+    autorNome: 'Morador Teste',
+    autorTipo: 'morador',
+    texto: 'Publicação permitida depois do desbanimento.',
+    criadoEm: serverTimestamp(),
+    criadoEmCliente: Date.now(),
+  });
+  assert.equal((await getDoc(publicacaoLiberada)).exists(), true, 'Morador desbanido deve voltar a conseguir publicar.');
+
+  console.log('Vínculo, lista de pessoas e banimento/desbanimento do mural validados com sucesso no Firestore Emulator.');
 } finally {
   await signOut(auth).catch(() => {});
   await terminate(db).catch(() => {});
