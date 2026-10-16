@@ -27,6 +27,9 @@ jobs:
       - name: Verificar TypeScript
         run: npm run typecheck
 
+      - name: Validar regras do Firestore
+        run: npx firebase-tools@latest emulators:exec --only firestore --project demo-cegonha "echo Regras Firestore carregadas"
+
       - name: Executar Expo Doctor
         run: npx expo-doctor@latest
 
