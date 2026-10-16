@@ -8,7 +8,7 @@ export const GoogleSignin = {
   configure() {},
   async hasPlayServices() { return true; },
   async signIn() {
-    const erro = new Error('O login Google precisa da development build do Cegonha. Rode npm run rebuild:android uma vez, instale a APK e depois use npm start.');
+    const erro = new Error('O login Google é um recurso nativo e não funciona no Expo Go. Para testá-lo, rode npm run rebuild:android uma vez, instale a APK e depois use npm run dev. O restante do app, inclusive o OCR.Space, funciona com npm start.');
     erro.code = 'EXPO_GO_UNSUPPORTED';
     throw erro;
   },
