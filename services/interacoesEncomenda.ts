@@ -52,10 +52,11 @@ export async function solicitarConfirmacaoRetirada(encomenda: any, perfil: any) 
       criadaEm: serverTimestamp(),
     });
 
+    // Este aviso pertence exclusivamente à Portaria. O morador fica vinculado
+    // pela interação acima, sem receber de volta o próprio aviso na central dele.
     transaction.set(notificacaoRef, {
       destinatarioTipo: 'porteiro',
       condominioId: textoSeguro(atual.condominioId),
-      moradorId: uid,
       encomendaId: atual.id,
       referenciaId: 'retirada',
       remetenteId: uid,
@@ -109,7 +110,6 @@ export async function contestarEncomenda(encomenda: any, perfil: any, tipo: Tipo
     transaction.set(notificacaoRef, {
       destinatarioTipo: 'porteiro',
       condominioId: textoSeguro(atual.condominioId),
-      moradorId: uid,
       encomendaId: atual.id,
       referenciaId: 'contestacao',
       remetenteId: uid,
