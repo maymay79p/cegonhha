@@ -41,7 +41,6 @@ export type Encomenda = {
   porteiroNome?: string;
   retiradaPorId?: string;
   retiradaPorNome?: string;
-  textoOCR?: string;
   ocrScore?: number;
   origem?: 'ocr' | 'manual';
   condominioId: string;
@@ -72,12 +71,10 @@ export type ResultadoOCR = {
   apartamento?: string | null;
   candidatos: CandidatoOCR[];
   tempoMs?: number;
-  leituraId?: string;
   motor?: 'google-ml-kit';
 };
 
 export type OCRMeta = {
-  leituraId?: string;
   tipoTexto: 'impresso' | 'manuscrito';
   iluminacao: 'boa' | 'media' | 'ruim';
   tempoMs: number;
@@ -87,7 +84,6 @@ export type OCRMeta = {
   cpfDetectado?: string;
   blocoDetectado?: string;
   apartamentoDetectado?: string;
-  textoOCR?: string;
   reconheceuNome: boolean;
   reconheceuCpf: boolean;
   reconheceuBloco: boolean;
@@ -109,8 +105,6 @@ export type RootStackParamList = {
   OCRHistorico: undefined;
   EncomendaForm: {
     candidato?: CandidatoOCR;
-    textoOCR?: string;
-    fotoEtiqueta?: string;
     ocrMeta?: OCRMeta;
   } | undefined;
   Detalhes: { encomenda: Encomenda };
