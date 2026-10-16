@@ -18,24 +18,29 @@ if (!Number.isFinite(major) || major < 22 || (major === 22 && minor < 13)) {
 }
 
 console.log('\n=== Cegonha · configuração simples ===');
-console.log(`[1/2] Node ${process.version} OK`);
-console.log('[2/2] Instalando/ajustando dependências...\n');
+console.log(`[1/4] Node ${process.version} OK`);
 
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+
+console.log('[2/4] Instalando/ajustando dependências...\n');
 executar(npm, ['install', '--no-audit', '--no-fund']);
 
-console.log('\nVerificando TypeScript...\n');
+console.log('\n[3/4] Conferindo compatibilidade das versões com o Expo...\n');
+executar(npx, ['expo', 'install', '--check']);
+
+console.log('\n[4/4] Verificando TypeScript...\n');
 executar(npm, ['run', 'typecheck']);
 
 console.log('\n=== Pronto ===');
-console.log('Modo recomendado (APK de desenvolvimento já instalada):');
+console.log('Modo recomendado para desenvolver e testar, inclusive OCR.Space:');
 console.log('  npm start');
 console.log('');
-console.log('Se OCR/Google disserem que o módulo nativo não existe, gere UMA nova APK limpa:');
-console.log('  npm run rebuild:android');
+console.log('O npm start usa Expo Go. Não precisa gerar APK para testar o OCR.');
 console.log('');
-console.log('Expo Go, apenas para telas sem OCR/Google/push:');
-console.log('  npm run go');
+console.log('Somente Google Sign-In nativo e push remoto precisam da development build:');
+console.log('  npm run rebuild:android');
+console.log('  npm run dev');
 console.log('');
 console.log('Firebase básico (regras, sem Functions/Blaze):');
 console.log('  npm run firebase:deploy');
