@@ -2,6 +2,11 @@ import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from './firebase';
 import { ResultadoOCR } from './types';
 
+const OCR_SPACE_ENDPOINT = 'https://api.ocr.space/parse/image';
+const OCR_SPACE_DEMO_KEY = 'helloworld';
+const OCR_SPACE_TIMEOUT_MS = 25000;
+const OCR_SPACE_FREE_LIMIT_BYTES = 980000;
+
 function normalizar(valor = '') {
   return valor
     .normalize('NFD')
@@ -91,30 +96,105 @@ function calcularScore(dados: any, morador: any) {
   return partes.reduce((s, p) => s + p.valor * p.peso, 0) / pesoTotal;
 }
 
-async function lerTextoMLKit(imagemUri: string) {
-  if (!imagemUri) throw new Error('A imagem da etiqueta não foi encontrada.');
+function apiKeyOCRSpace() {
+  return process.env.EXPO_PUBLIC_OCR_SPACE_API_KEY?.trim() || OCR_SPACE_DEMO_KEY;
+}
+
+export function usandoChaveDemoOCRSpace() {
+  return apiKeyOCRSpace() === OCR_SPACE_DEMO_KEY;
+}
+
+function bytesBase64(dataUri: string) {
+  const base64 = dataUri.split(',')[1] || '';
+  return Math.ceil(base64.length * 0.75);
+}
+
+function mensagemErroApi(valor: unknown) {
+  if (Array.isArray(valor)) return valor.filter(Boolean).map(String).join(' ');
+  if (typeof valor === 'string') return valor;
+  if (valor == null) return '';
+  return String(valor);
+}
+
+async function lerTextoOCRSpace(imagemBase64: string, tipoTexto: 'impresso' | 'manuscrito') {
+  if (!imagemBase64?.startsWith('data:image/')) {
+    throw new Error('Não foi possível preparar a imagem para o OCR.Space. Tente fotografar novamente.');
+  }
+
+  if (bytesBase64(imagemBase64) > OCR_SPACE_FREE_LIMIT_BYTES) {
+    throw new Error('A foto ficou grande demais para o plano gratuito do OCR.Space. Tente outra foto mais próxima da etiqueta.');
+  }
+
+  const form = new FormData();
+  form.append('base64Image', imagemBase64);
+  form.append('language', 'auto');
+  form.append('isOverlayRequired', 'false');
+  form.append('detectOrientation', 'true');
+  form.append('scale', 'true');
+  form.append('OCREngine', tipoTexto === 'manuscrito' ? '3' : '2');
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), OCR_SPACE_TIMEOUT_MS);
 
   try {
-    // expo-ocr-kit usa Google ML Kit no Android, mas é implementado com a
-    // Expo Modules API, que é compatível com a Nova Arquitetura do SDK 57.
-    const modulo = await import('expo-ocr-kit');
-    const resultado = await modulo.recognizeText(imagemUri);
-    const texto = String(resultado?.text || '').trim();
-    if (!texto) throw new Error('Nenhum texto foi reconhecido. Tente uma foto mais nítida, reta e bem iluminada.');
+    const response = await fetch(OCR_SPACE_ENDPOINT, {
+      method: 'POST',
+      headers: { apikey: apiKeyOCRSpace() },
+      body: form,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`OCR.Space respondeu com HTTP ${response.status}.`);
+    }
+
+    const data: any = await response.json();
+    const erroGeral = mensagemErroApi(data?.ErrorMessage || data?.ErrorDetails);
+    const erroResultado = mensagemErroApi(data?.ParsedResults?.[0]?.ErrorMessage || data?.ParsedResults?.[0]?.ErrorDetails);
+
+    if (data?.IsErroredOnProcessing || erroGeral || erroResultado) {
+      const detalhe = erroResultado || erroGeral || 'Falha no processamento da imagem.';
+      if (/api.?key|apikey|quota|rate|maximum|limit/i.test(detalhe)) {
+        const complemento = usandoChaveDemoOCRSpace()
+          ? ' O Cegonha está usando a chave pública de teste. Crie uma chave gratuita do OCR.Space e coloque EXPO_PUBLIC_OCR_SPACE_API_KEY no arquivo .env.local.'
+          : '';
+        throw new Error(`OCR.Space recusou a leitura: ${detalhe}.${complemento}`);
+      }
+      throw new Error(`OCR.Space não conseguiu ler a etiqueta: ${detalhe}`);
+    }
+
+    const texto = (data?.ParsedResults || [])
+      .map((item: any) => String(item?.ParsedText || '').trim())
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+
+    if (!texto) {
+      throw new Error('O OCR.Space não encontrou texto legível. Tente uma foto mais próxima, reta e bem iluminada.');
+    }
+
     return texto;
   } catch (erro: any) {
-    const mensagem = String(erro?.message || erro || '');
-    if (/native module|cannot find|not found|undefined|not linked|doesn.?t seem to be linked|expo go/i.test(mensagem)) {
-      throw new Error('O OCR está instalado, mas esta APK ainda não contém o módulo nativo novo. Rode “npm run rebuild:android” uma vez, instale a APK gerada e depois use apenas “npm start”.');
+    if (erro?.name === 'AbortError') {
+      throw new Error('O OCR.Space demorou demais para responder. Verifique a internet e tente novamente.');
+    }
+    if (/network request failed|failed to fetch|networkerror/i.test(String(erro?.message || erro))) {
+      throw new Error('Não foi possível acessar o OCR.Space. Verifique a conexão com a internet e tente novamente.');
     }
     throw erro;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
-export async function reconhecerEtiqueta(imagemUri: string, condominioId: string): Promise<ResultadoOCR> {
+export async function reconhecerEtiqueta(
+  imagemBase64: string,
+  condominioId: string,
+  tipoTexto: 'impresso' | 'manuscrito' = 'impresso',
+): Promise<ResultadoOCR> {
   if (!condominioId) throw new Error('A conta da portaria ainda não está vinculada a um condomínio.');
 
-  const texto = await lerTextoMLKit(imagemUri);
+  const texto = await lerTextoOCRSpace(imagemBase64, tipoTexto);
   const dados = extrairDados(texto);
   const snap = await getDocs(query(collection(db, 'usuarios'), where('condominioId', '==', condominioId)));
   const candidatos = snap.docs
@@ -139,5 +219,5 @@ export async function reconhecerEtiqueta(imagemUri: string, condominioId: string
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
 
-  return { texto, ...dados, candidatos, motor: 'google-ml-kit' };
+  return { texto, ...dados, candidatos, motor: 'ocr-space' };
 }
