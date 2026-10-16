@@ -9,99 +9,89 @@ Aplicativo de gerenciamento de encomendas para condomínios, desenvolvido com Re
 
 O perfil de síndico não faz parte do sistema atual. Também não existe chat privado Morador ↔ Portaria: a comunicação do projeto é feita por avisos operacionais e pelo Mural coletivo.
 
-## Jeito mais fácil de rodar
+## Jeito mais simples de rodar
 
-O projeto agora tem **dois modos de desenvolvimento** para não obrigar uma nova build nativa a cada teste.
+O Cegonha usa módulos nativos para OCR, login Google e push. Por isso, o modo principal é uma **development build**.
 
-### 1. Modo rápido — Expo Go
-
-Use para testar login, cadastro, telas, Firestore, encomendas, histórico, Mural, denúncias, relatórios, perfil e a Central de Avisos.
-
-Na primeira vez:
+Depois de atualizar o projeto:
 
 ```bash
+git pull origin main
 npm run setup
+npm run firebase:deploy
 ```
 
-Depois:
+Depois desta atualização de OCR/login Google, gere uma APK limpa **uma vez**:
+
+```bash
+npm run rebuild:android
+```
+
+Instale a APK gerada no Android. A partir daí, para alterações normais de telas, TypeScript, Firestore e regras de negócio, use apenas:
 
 ```bash
 npm start
 ```
 
-O comando `npm start` força o **Expo Go**. Escaneie o QR Code com o Expo Go no Android.
+`npm start` abre o Metro para a development build completa. Não é necessário gerar outra APK até que uma dependência/configuração nativa mude.
 
-Neste modo, o app **não tenta registrar push remoto** e continua funcionando normalmente. O OCR com Google ML Kit e o push do sistema operacional precisam de uma development build.
-
-### 2. Modo completo — development build
-
-Use quando precisar testar:
-
-- OCR com Google ML Kit;
-- push notification real;
-- login Google no ambiente nativo;
-- qualquer outra integração nativa.
-
-Gere o APK quando houver mudança em dependências/configuração nativa:
+O Expo Go continua disponível em modo limitado:
 
 ```bash
-npm run build:android
+npm run go
 ```
 
-Instale o APK gerado no celular. Depois, nas próximas vezes, normalmente basta:
-
-```bash
-npm run dev
-```
-
-**Não é necessário gerar uma nova APK a cada alteração de tela ou TypeScript.** Só gere novamente quando uma biblioteca/configuração nativa mudar.
+Nesse modo OCR, Google Sign-In nativo e push remoto são desativados de propósito.
 
 ## Comandos úteis
 
 ```bash
-npm run setup               # instala/ajusta dependências e valida TypeScript
-npm start                   # Expo Go (modo rápido)
-npm run dev                 # development build (modo completo)
-npm run build:android       # gera APK de desenvolvimento no EAS
+npm run setup                 # instala dependências e valida TypeScript
+npm run rebuild:android       # gera APK limpa quando módulos nativos mudarem
+npm start                     # development build completa
+npm run go                    # Expo Go limitado
 npm run build:preview:android # gera APK de demonstração/preview
-npm run typecheck           # verifica TypeScript
-npm run check               # TypeScript + Expo Doctor
+npm run typecheck             # verifica TypeScript
+npm run check                 # TypeScript + bundle Expo Go + Expo Doctor
+npm run firebase:deploy       # publica somente regras do Firestore
 ```
 
-O EAS está configurado para gerar **APK** nos perfis `development` e `preview`, facilitando a instalação direta no Android.
+O EAS está configurado para gerar APK nos perfis `development` e `preview`, facilitando a instalação direta no Android.
 
 ## Firebase sem complicar o desenvolvimento
 
-O funcionamento básico do aplicativo não deve depender de Cloud Functions.
+O funcionamento básico do aplicativo não depende de Cloud Functions.
 
-Para publicar somente as regras do Firestore:
+Para publicar as regras atuais do Firestore:
 
 ```bash
 npm run firebase:deploy
 ```
 
-Esse comando agora é equivalente ao deploy das regras e **não tenta publicar Functions**, portanto não esbarra no plano Blaze apenas para testar o app.
+Esse comando **não publica Functions** e, portanto, não esbarra no plano Blaze apenas para testar o app.
 
-Para o backend opcional de push notification:
+O backend opcional de push pode ser publicado separadamente:
 
 ```bash
 npm install --prefix functions
 npm run firebase:deploy:push
 ```
 
-A publicação das Functions exige que o projeto Firebase permita Cloud Functions/Artifact Registry (normalmente plano Blaze). Se o backend de push não estiver publicado, a Central de Avisos interna do Cegonha continua funcionando.
+A publicação de Functions exige que o projeto Firebase permita Cloud Functions/Artifact Registry. Se o backend de push não estiver publicado, a Central de Avisos interna continua funcionando.
 
 ## Recursos principais
 
 - cadastro e atualização de dados pessoais;
 - CPF e telefone com formatação/validação;
 - confirmação de e-mail no cadastro por e-mail/senha;
+- login por e-mail/senha e Google;
 - registro de encomendas pela Portaria;
 - histórico geral da Portaria e individual do Morador;
 - Central de Avisos para Morador e Portaria;
 - notificações automáticas de chegada, retirada, lembrete, vínculo, entrega prevista e denúncia;
 - push notifications com Expo Notifications quando o backend/FCM estiver configurado;
-- OCR local com Google ML Kit para nome, CPF, bloco e apartamento;
+- OCR local com Google ML Kit no Android, via `expo-ocr-kit`;
+- tentativa de leitura de nome, CPF, bloco e apartamento;
 - histórico das leituras OCR;
 - Mural em tempo real, com filtro de linguagem imprópria, denúncia e moderação;
 - Central de Denúncias para ambos os perfis;
@@ -110,8 +100,7 @@ A publicação das Functions exige que o projeto Firebase permita Cloud Function
 - código do condomínio com opção de copiar;
 - pesquisa e filtros;
 - listeners do Firestore em tempo real;
-- tema claro, escuro ou conforme o sistema;
-- login por e-mail/senha e Google.
+- tema claro, escuro ou conforme o sistema.
 
 ## Comunicação entre Morador e Portaria
 
@@ -140,39 +129,67 @@ Moradores e Portaria do mesmo condomínio usam o **Mural** para comunicação co
 
 **Contato individual por chat não faz parte da proposta funcional do Cegonha.**
 
-## Push notifications
+## Confirmação de chegada
 
-O app registra um `ExpoPushToken` por instalação autorizada em `pushDispositivos`. No Expo Go esse registro é ignorado de propósito para permitir desenvolvimento simples sem erros de módulo/credencial.
+A encomenda é o registro principal da confirmação. O fluxo foi estruturado para que falhas auxiliares de foto, auditoria ou telemetria do OCR não cancelem a chegada inteira.
 
-Na development build, quando FCM/EAS e a Cloud Function estiverem configurados, a função `enviarPushDaNotificacao` processa os documentos criados em `notificacoes` e envia os avisos pelo Expo Push Service.
-
-Para Android real, ainda é necessário configurar FCM V1/EAS. Não coloque chaves privadas ou arquivo de conta de serviço no repositório público. Veja `docs/PUSH_SETUP.md`.
-
-## OCR com Google ML Kit
-
-O OCR é executado localmente com `@react-native-ml-kit/text-recognition`. Por ser um módulo nativo, ele não funciona dentro do Expo Go.
-
-Para testar OCR:
+O aviso ao Morador é criado logo após a encomenda. Se regras antigas do Firestore bloquearem esse aviso, a tela informa que a chegada foi registrada e orienta a publicar as regras atuais:
 
 ```bash
-npm run build:android
+npm run firebase:deploy
 ```
 
-Instale o APK e depois rode:
+## OCR
+
+O OCR usa `expo-ocr-kit`, um módulo baseado na Expo Modules API. No Android, o reconhecimento é feito com Google ML Kit no próprio aparelho.
+
+Como OCR é nativo, ele precisa estar compilado na APK. Se aparecer `native module not found`, `not linked` ou mensagem semelhante:
 
 ```bash
-npm run dev
+npm run rebuild:android
 ```
 
-O restante do app pode ser desenvolvido normalmente com `npm start` no Expo Go.
+Instale a APK nova e depois volte a usar:
+
+```bash
+npm start
+```
 
 ## Login Google
 
-O código possui o fluxo de autenticação Google/Firebase. Para Android nativo, use o package `com.maymay79p.cegonha` e mantenha SHA/OAuth configurados no Google/Firebase. O teste mais confiável desse fluxo é feito na development build.
+No Android, o login usa `@react-native-google-signin/google-signin`, em vez de depender do redirecionamento OAuth pelo navegador. Isso evita o fluxo web que pode gerar `400 invalid_request`.
+
+O package Android é:
+
+```text
+com.maymay79p.cegonha
+```
+
+O Firebase recebe o `idToken` do Google e conclui a autenticação normalmente.
+
+Se uma APK limpa ainda retornar `DEVELOPER_ERROR`, confira a SHA-1 da chave Android usada pelo EAS:
+
+```bash
+npx eas-cli@latest credentials -p android
+```
+
+Essa SHA-1 precisa estar cadastrada no cliente Android `com.maymay79p.cegonha` no Firebase/Google Cloud. Depois de alterar a credencial externa, gere outra APK limpa.
+
+## Push notifications
+
+O app registra um `ExpoPushToken` por instalação autorizada em `pushDispositivos`. Na development build, quando FCM/EAS e a Cloud Function estiverem configurados, a função `enviarPushDaNotificacao` processa os documentos criados em `notificacoes` e envia avisos pelo Expo Push Service.
+
+No Expo Go esse recurso é substituído por um stub seguro. Para Android real, ainda é necessário configurar FCM V1/EAS. Não coloque chaves privadas ou arquivos de conta de serviço no repositório público. Veja `docs/PUSH_SETUP.md`.
 
 ## Validação automática
 
-O GitHub Actions instala as dependências, executa o TypeScript e testa o código do backend de push. Alterações na `main` passam por essa validação automaticamente.
+O GitHub Actions:
+
+- instala as dependências do app;
+- verifica TypeScript;
+- executa `expo prebuild` do Android para validar plugins/autolink nativo;
+- gera o bundle do modo Expo Go;
+- instala e testa o backend de push.
 
 ## Observações
 
@@ -180,4 +197,4 @@ O lembrete de encomenda com mais de 3 dias ainda é identificado quando a Portar
 
 A localização do condomínio é cadastrada como endereço e aberta no aplicativo de mapas do dispositivo.
 
-Para um passo a passo curto de execução, veja `docs/RODAR_APP.md`.
+Para o passo a passo de execução, veja `docs/RODAR_APP.md`.
