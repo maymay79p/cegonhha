@@ -11,52 +11,46 @@ O perfil de síndico não faz parte do sistema atual. Também não existe chat p
 
 ## Jeito mais simples de rodar
 
-O Cegonha usa módulos nativos para OCR, login Google e push. Por isso, o modo principal é uma **development build**.
+O modo recomendado é o **Expo Go**. O OCR usa OCR.Space por HTTP e, portanto, não exige mais uma APK nativa para funcionar.
 
 Depois de atualizar o projeto:
 
 ```bash
 git pull origin main
 npm run setup
-npm run firebase:deploy
-```
-
-Depois desta atualização de OCR/login Google, gere uma APK limpa **uma vez**:
-
-```bash
-npm run rebuild:android
-```
-
-Instale a APK gerada no Android. A partir daí, para alterações normais de telas, TypeScript, Firestore e regras de negócio, use apenas:
-
-```bash
 npm start
 ```
 
-`npm start` abre o Metro para a development build completa. Não é necessário gerar outra APK até que uma dependência/configuração nativa mude.
+`npm run setup` instala as dependências, confere as versões esperadas pelo Expo SDK 57 e valida o TypeScript. `npm start` limpa o cache e abre o Expo Go.
 
-O Expo Go continua disponível em modo limitado:
+### O que funciona no Expo Go
 
-```bash
-npm run go
-```
+- login por e-mail e senha;
+- cadastro e perfil;
+- condomínio;
+- encomendas e histórico;
+- confirmação de chegada;
+- OCR.Space pela câmera ou galeria;
+- Mural e denúncias;
+- relatórios;
+- previsões;
+- Central de Avisos;
+- Firestore em tempo real.
 
-Nesse modo OCR, Google Sign-In nativo e push remoto são desativados de propósito.
+Google Sign-In nativo e push remoto continuam sendo recursos de development build.
 
 ## Comandos úteis
 
 ```bash
-npm run setup                 # instala dependências e valida TypeScript
-npm run rebuild:android       # gera APK limpa quando módulos nativos mudarem
-npm start                     # development build completa
-npm run go                    # Expo Go limitado
-npm run build:preview:android # gera APK de demonstração/preview
+npm run setup                 # instala dependências e valida versões/TypeScript
+npm start                     # Expo Go, modo recomendado
+npm run check                 # versões + TypeScript + bundle Expo Go + Expo Doctor
 npm run typecheck             # verifica TypeScript
-npm run check                 # TypeScript + bundle Expo Go + Expo Doctor
 npm run firebase:deploy       # publica somente regras do Firestore
+npm run rebuild:android       # gera APK para Google Sign-In nativo/push remoto
+npm run dev                   # abre a development build instalada
+npm run build:preview:android # gera APK de demonstração/preview
 ```
-
-O EAS está configurado para gerar APK nos perfis `development` e `preview`, facilitando a instalação direta no Android.
 
 ## Firebase sem complicar o desenvolvimento
 
@@ -90,9 +84,9 @@ A publicação de Functions exige que o projeto Firebase permita Cloud Functions
 - Central de Avisos para Morador e Portaria;
 - notificações automáticas de chegada, retirada, lembrete, vínculo, entrega prevista e denúncia;
 - push notifications com Expo Notifications quando o backend/FCM estiver configurado;
-- OCR local com Google ML Kit no Android, via `expo-ocr-kit`;
+- OCR de etiquetas via OCR.Space;
 - tentativa de leitura de nome, CPF, bloco e apartamento;
-- histórico das leituras OCR;
+- histórico das leituras OCR confirmadas;
 - Mural em tempo real, com filtro de linguagem imprópria, denúncia e moderação;
 - Central de Denúncias para ambos os perfis;
 - relatórios semanais e indicadores da Portaria;
@@ -131,7 +125,7 @@ Moradores e Portaria do mesmo condomínio usam o **Mural** para comunicação co
 
 ## Confirmação de chegada
 
-A encomenda é o registro principal da confirmação. O fluxo foi estruturado para que falhas auxiliares de foto, auditoria ou telemetria do OCR não cancelem a chegada inteira.
+A encomenda é o registro principal da confirmação. O fluxo foi estruturado para que falhas auxiliares de auditoria ou telemetria do OCR não cancelem a chegada inteira.
 
 O aviso ao Morador é criado logo após a encomenda. Se regras antigas do Firestore bloquearem esse aviso, a tela informa que a chegada foi registrada e orienta a publicar as regras atuais:
 
@@ -139,25 +133,40 @@ O aviso ao Morador é criado logo após a encomenda. Se regras antigas do Firest
 npm run firebase:deploy
 ```
 
-## OCR
+## OCR.Space
 
-O OCR usa `expo-ocr-kit`, um módulo baseado na Expo Modules API. No Android, o reconhecimento é feito com Google ML Kit no próprio aparelho.
+O OCR não usa mais biblioteca nativa. A tela comprime a imagem e envia uma cópia temporária ao endpoint HTTPS do OCR.Space. O texto retornado é analisado para tentar extrair nome, CPF, bloco e apartamento e então cruzado com os moradores do condomínio.
 
-Como OCR é nativo, ele precisa estar compilado na APK. Se aparecer `native module not found`, `not linked` ou mensagem semelhante:
+A foto da etiqueta **não é salva no Firestore nem anexada à encomenda**. O texto bruto reconhecido também não é persistido. Quando uma encomenda é confirmada, ficam somente os principais campos extraídos e métricas da leitura.
+
+Depois da leitura, a Portaria pode:
+
+- remover somente a foto da tela e manter os dados reconhecidos;
+- descartar a leitura inteira;
+- escolher um morador sugerido;
+- corrigir/buscar o morador manualmente.
+
+Para facilitar o primeiro teste, se nenhuma chave estiver configurada o app usa a chave pública `helloworld` do OCR.Space. Ela é apenas para testes rápidos e possui limite baixo. Para uso mais estável, crie `.env.local`:
+
+```env
+EXPO_PUBLIC_OCR_SPACE_API_KEY=sua_chave_aqui
+```
+
+O plano gratuito do OCR.Space possui limite de tamanho; por isso o Cegonha reduz e comprime automaticamente a foto antes do envio.
+
+## Login Google
+
+No Android, o login Google continua usando `@react-native-google-signin/google-signin`. Ele é um recurso nativo e não roda no Expo Go. Para testar especificamente esse login:
 
 ```bash
 npm run rebuild:android
 ```
 
-Instale a APK nova e depois volte a usar:
+Instale a APK e rode:
 
 ```bash
-npm start
+npm run dev
 ```
-
-## Login Google
-
-No Android, o login usa `@react-native-google-signin/google-signin`, em vez de depender do redirecionamento OAuth pelo navegador. Isso evita o fluxo web que pode gerar `400 invalid_request`.
 
 O package Android é:
 
@@ -165,30 +174,30 @@ O package Android é:
 com.maymay79p.cegonha
 ```
 
-O Firebase recebe o `idToken` do Google e conclui a autenticação normalmente.
-
-Se uma APK limpa ainda retornar `DEVELOPER_ERROR`, confira a SHA-1 da chave Android usada pelo EAS:
+Se a APK retornar `DEVELOPER_ERROR`, confira a SHA-1 da chave Android usada pelo EAS:
 
 ```bash
 npx eas-cli@latest credentials -p android
 ```
 
-Essa SHA-1 precisa estar cadastrada no cliente Android `com.maymay79p.cegonha` no Firebase/Google Cloud. Depois de alterar a credencial externa, gere outra APK limpa.
+Essa SHA-1 precisa estar cadastrada no cliente Android `com.maymay79p.cegonha` no Firebase/Google Cloud.
 
 ## Push notifications
 
-O app registra um `ExpoPushToken` por instalação autorizada em `pushDispositivos`. Na development build, quando FCM/EAS e a Cloud Function estiverem configurados, a função `enviarPushDaNotificacao` processa os documentos criados em `notificacoes` e envia avisos pelo Expo Push Service.
+A Central de Avisos interna funciona no Expo Go porque usa Firestore. O push remoto com o aplicativo fechado continua opcional e depende de `expo-notifications`, FCM/EAS e do backend configurado.
 
-No Expo Go esse recurso é substituído por um stub seguro. Para Android real, ainda é necessário configurar FCM V1/EAS. Não coloque chaves privadas ou arquivos de conta de serviço no repositório público. Veja `docs/PUSH_SETUP.md`.
+No Expo Go o módulo de push remoto é substituído por um stub seguro. Para Android real, ainda é necessário configurar FCM V1/EAS. Não coloque chaves privadas ou arquivos de conta de serviço no repositório público. Veja `docs/PUSH_SETUP.md`.
 
 ## Validação automática
 
 O GitHub Actions:
 
 - instala as dependências do app;
+- verifica se as versões são compatíveis com o Expo;
 - verifica TypeScript;
-- executa `expo prebuild` do Android para validar plugins/autolink nativo;
+- executa Expo Doctor;
 - gera o bundle do modo Expo Go;
+- executa `expo prebuild` para validar os recursos nativos opcionais;
 - instala e testa o backend de push.
 
 ## Observações
