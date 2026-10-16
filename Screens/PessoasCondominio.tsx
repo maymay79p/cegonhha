@@ -37,7 +37,7 @@ export default function PessoasCondominio({ navigation }: any) {
     return onSnapshot(q, snap => {
       const lista = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       lista.sort((a, b) => {
-        if (a.tipo !== b.tipo) return a.tipo === 'morador' ? -1 : 1;
+        if (a.tipo !== b.tipo) return a.tipo === 'porteiro' ? -1 : 1;
         return String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR');
       });
       setPessoas(lista.filter(item => item.tipo === 'morador' || item.tipo === 'porteiro'));
@@ -133,7 +133,7 @@ export default function PessoasCondominio({ navigation }: any) {
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     safe:{flex:1,backgroundColor:colors.background},
-    container:{flex:1,paddingHorizontal:20,paddingTop:8,backgroundColor:colors.background},
+    container:{flex:1,paddingHorizontal:20,paddingTop:22,backgroundColor:colors.background},
     header:{flexDirection:'row',alignItems:'flex-start',gap:12,marginBottom:14},
     back:{width:42,height:42,borderRadius:21,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,alignItems:'center',justifyContent:'center'},
     eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.7},
