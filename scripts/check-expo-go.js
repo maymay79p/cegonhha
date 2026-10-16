@@ -8,8 +8,7 @@ const output = path.resolve(process.cwd(), '.expo-go-check');
 fs.rmSync(output, { recursive: true, force: true });
 
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-const env = { ...process.env };
-delete env.CEGONHA_NATIVE_RUNTIME;
+const env = { ...process.env, CEGONHA_EXPO_GO: '1' };
 
 const result = spawnSync(npx, ['expo', 'export', '--platform', 'android', '--output-dir', output, '--clear'], {
   stdio: 'inherit',
