@@ -16,7 +16,8 @@
         }
       ],
       "expo-web-browser",
-      "expo-notifications"
+      "expo-notifications",
+      "@react-native-google-signin/google-signin"
     ],
     "android": {
       "package": "com.maymay79p.cegonha",
