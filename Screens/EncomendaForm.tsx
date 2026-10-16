@@ -77,6 +77,10 @@ export default function EncomendaForm({ navigation, route }: any) {
       .slice(0,30);
   }, [moradores,busca]);
 
+  function voltarParaHome() {
+    navigation.navigate('Home');
+  }
+
   async function salvar(ignorarDuplicidade = false) {
     if (perfil?.tipo !== 'porteiro') return Alert.alert('Acesso', 'Apenas a portaria pode registrar chegadas.');
     if (!selecionado) return Alert.alert('Atenção', 'Selecione um morador.');
@@ -90,14 +94,43 @@ export default function EncomendaForm({ navigation, route }: any) {
           return Alert.alert('Possível duplicidade','Já existe uma encomenda registrada para este morador nos últimos 10 minutos. Deseja registrar mesmo assim?',[{text:'Cancelar',style:'cancel'},{text:'Registrar mesmo assim',onPress:()=>salvar(true)}]);
         }
       }
-      await registrarChegada({ perfil, morador:selecionado, descricao, textoOCR, fotoEtiqueta, ocrMeta, previsao:previsaoSelecionada });
-      Alert.alert('Chegada registrada','A encomenda e a notificação do morador foram gravadas juntas. O aviso já está disponível na conta dele.');
-      navigation.navigate('Home');
+
+      const resultado = await registrarChegada({
+        perfil,
+        morador: selecionado,
+        descricao,
+        textoOCR,
+        fotoEtiqueta,
+        ocrMeta,
+        previsao: previsaoSelecionada,
+      });
+
+      if (resultado.avisos.length > 0) {
+        const cabecalho = resultado.notificacaoCriada
+          ? 'A encomenda foi registrada e o aviso do morador foi criado.'
+          : 'A encomenda foi registrada com sucesso.';
+        Alert.alert(
+          'Chegada registrada',
+          `${cabecalho}\n\n${resultado.avisos.join('\n')}`,
+          [{ text: 'OK', onPress: voltarParaHome }],
+        );
+        return;
+      }
+
+      Alert.alert(
+        'Chegada registrada',
+        'A encomenda foi registrada e o aviso do morador já está disponível na conta dele.',
+        [{ text: 'OK', onPress: voltarParaHome }],
+      );
     } catch (e:any) {
       const codigo = String(e?.code || '');
-      const mensagem = codigo.includes('permission-denied') ? 'O seu perfil da portaria está sem permissão para gravar encomendas. Confirme o vínculo do condomínio e as regras do Firestore.' : e?.message || 'Não foi possível registrar a encomenda.';
-      Alert.alert('Erro', mensagem);
-    } finally { setLoading(false); }
+      const mensagem = codigo.includes('permission-denied')
+        ? 'A Portaria não tem permissão para criar a encomenda. Atualize as regras do Firestore com “npm run firebase:deploy”, confirme que a Portaria e o morador estão no mesmo condomínio e tente novamente.'
+        : e?.message || 'Não foi possível registrar a encomenda.';
+      Alert.alert('Erro ao registrar chegada', mensagem);
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (perfil?.tipo !== 'porteiro') return null;
