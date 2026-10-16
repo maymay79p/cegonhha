@@ -7,7 +7,6 @@ import {
   runTransaction,
   serverTimestamp,
   setDoc,
-  updateDoc,
   where,
 } from 'firebase/firestore';
 import { auth, db } from '../firebase';
@@ -46,12 +45,10 @@ export async function buscarDuplicada(moradorId: string, condominioId: string) {
     }) || null;
 }
 
-export async function registrarChegada({ perfil, morador, descricao, textoOCR, fotoEtiqueta, ocrMeta, previsao }: {
+export async function registrarChegada({ perfil, morador, descricao, ocrMeta, previsao }: {
   perfil: any;
   morador: any;
   descricao: string;
-  textoOCR?: string;
-  fotoEtiqueta?: string;
   ocrMeta?: OCRMeta;
   previsao?: any;
 }): Promise<ResultadoRegistroChegada> {
@@ -85,17 +82,16 @@ export async function registrarChegada({ perfil, morador, descricao, textoOCR, f
   historico.push(evento('recebida', 'Recebida pela portaria', uidAtual, perfil.nome));
   historico.push(evento('pendente', 'Aguardando retirada', uidAtual, perfil.nome));
 
-  // A encomenda é o registro crítico. Ela é salva primeiro para que uma falha
-  // secundária (foto, telemetria OCR ou auditoria) nunca impeça a confirmação.
+  // A foto e o texto bruto do OCR nunca são persistidos. A encomenda guarda
+  // somente a origem e a pontuação de correspondência, quando houver OCR.
   await setDoc(encomendaRef, {
     moradorId: morador.id,
     moradorNome: morador.nome,
     bloco: morador.bloco || '',
     apartamento: morador.apartamento || '',
     descricao: descricaoLimpa || previsao?.descricao || '',
-    textoOCR: textoOCR || '',
     ocrScore: ocrMeta?.topScore || 0,
-    origem: textoOCR ? 'ocr' : 'manual',
+    origem: ocrMeta ? 'ocr' : 'manual',
     status: 'pendente',
     porteiroId: uidAtual,
     porteiroNome: perfil.nome,
@@ -143,17 +139,30 @@ export async function registrarChegada({ perfil, morador, descricao, textoOCR, f
     }),
   ];
 
-  if (fotoEtiqueta) {
-    tarefasAuxiliares.push(setDoc(doc(db, 'fotosEncomendas', encomendaRef.id), {
-      encomendaId: encomendaRef.id,
-      moradorId: morador.id,
+  if (ocrMeta) {
+    const leituraRef = doc(collection(db, 'ocrLeituras'));
+    tarefasAuxiliares.push(setDoc(leituraRef, {
       condominioId: condominioAtual,
-      foto: fotoEtiqueta,
+      porteiroId: uidAtual,
+      porteiroNome: perfil.nome || '',
+      motorOCR: 'google-ml-kit',
+      tipoTexto: ocrMeta.tipoTexto,
+      iluminacao: ocrMeta.iluminacao,
+      tempoMs: ocrMeta.tempoMs,
+      nomeDetectado: ocrMeta.nomeDetectado || '',
+      cpfDetectado: ocrMeta.cpfDetectado || '',
+      blocoDetectado: ocrMeta.blocoDetectado || '',
+      apartamentoDetectado: ocrMeta.apartamentoDetectado || '',
+      topCandidatoId: ocrMeta.topCandidatoId || '',
+      topScore: ocrMeta.topScore || 0,
+      confirmado: true,
+      encomendaId: encomendaRef.id,
+      moradorConfirmadoId: morador.id,
+      moradorConfirmadoNome: morador.nome || '',
+      confirmadoEm: serverTimestamp(),
       criadoEm: serverTimestamp(),
     }));
-  }
 
-  if (ocrMeta) {
     const testeRef = doc(collection(db, 'ocrTestes'));
     tarefasAuxiliares.push(setDoc(testeRef, {
       condominioId: condominioAtual,
@@ -172,28 +181,17 @@ export async function registrarChegada({ perfil, morador, descricao, textoOCR, f
       cpfDetectado: ocrMeta.cpfDetectado || '',
       blocoDetectado: ocrMeta.blocoDetectado || '',
       apartamentoDetectado: ocrMeta.apartamentoDetectado || '',
-      textoOCR: ocrMeta.textoOCR || textoOCR || '',
       reconheceuNome: ocrMeta.reconheceuNome,
       reconheceuCpf: ocrMeta.reconheceuCpf,
       reconheceuBloco: ocrMeta.reconheceuBloco,
       reconheceuApartamento: ocrMeta.reconheceuApartamento,
       criadoEm: serverTimestamp(),
     }));
-
-    if (ocrMeta.leituraId) {
-      tarefasAuxiliares.push(updateDoc(doc(db, 'ocrLeituras', ocrMeta.leituraId), {
-        confirmado: true,
-        encomendaId: encomendaRef.id,
-        moradorConfirmadoId: morador.id,
-        moradorConfirmadoNome: morador.nome || '',
-        confirmadoEm: serverTimestamp(),
-      }));
-    }
   }
 
   const resultadosAuxiliares = await Promise.allSettled(tarefasAuxiliares);
   if (resultadosAuxiliares.some(resultado => resultado.status === 'rejected')) {
-    avisos.push('A chegada foi salva. Alguns dados auxiliares de auditoria/OCR/foto não puderam ser gravados, mas isso não altera a encomenda.');
+    avisos.push('A chegada foi salva. Alguns dados auxiliares de auditoria/OCR não puderam ser gravados, mas isso não altera a encomenda.');
   }
 
   return { id: encomendaRef.id, notificacaoCriada, avisos };
