@@ -114,6 +114,7 @@ export type RootStackParamList = {
   Perfil: undefined;
   Previsoes: undefined;
   SolicitacoesCondominio: undefined;
+  PessoasCondominio: undefined;
   Privacidade: undefined;
   Mural: undefined;
   Condominio: undefined;
