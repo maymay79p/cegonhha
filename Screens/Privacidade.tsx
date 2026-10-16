@@ -24,11 +24,12 @@ export default function Privacidade({ navigation }: any) {
       <Text style={styles.intro}>O Cegonha usa os dados necessários para identificar moradores, organizar entregas, manter o histórico e permitir a comunicação do condomínio.</Text>
 
       <Bloco icon="person-outline" title="Dados do perfil" colors={colors} styles={styles}>Nome, e-mail, CPF, bloco, apartamento, telefone, tipo de acesso e vínculo com o condomínio.</Bloco>
-      <Bloco icon="cube-outline" title="Dados das encomendas" colors={colors} styles={styles}>Destinatário, status, datas, responsável pelo registro, histórico e uma miniatura da etiqueta quando a chegada é confirmada usando OCR.</Bloco>
-      <Bloco icon="scan-outline" title="OCR externo" colors={colors} styles={styles}>A imagem escolhida para leitura é enviada ao OCR.Space. O histórico da portaria guarda o texto reconhecido e os campos detectados; a imagem da etiqueta só é armazenada como miniatura quando a encomenda é confirmada.</Bloco>
+      <Bloco icon="cube-outline" title="Dados das encomendas" colors={colors} styles={styles}>Destinatário, status, datas, responsável pelo registro, histórico, descrição e, quando houver OCR, somente a pontuação de correspondência e os principais dados extraídos. A foto da etiqueta não é anexada à encomenda.</Bloco>
+      <Bloco icon="scan-outline" title="OCR externo" colors={colors} styles={styles}>Para reconhecer uma etiqueta, o Cegonha envia temporariamente uma versão comprimida da imagem ao OCR.Space por HTTPS. O Cegonha não salva essa foto nem o texto bruto no Firestore. Depois da confirmação, ficam somente nome, CPF, bloco, apartamento e métricas necessárias para avaliar o OCR. O OCR.Space informa em sua política/FAQ que não armazena os documentos ou imagens enviados.</Bloco>
+      <Bloco icon="trash-outline" title="Descarte da leitura" colors={colors} styles={styles}>Após o reconhecimento, a Portaria pode remover apenas a foto da tela e manter os dados reconhecidos, ou descartar a leitura inteira antes de registrar a encomenda.</Bloco>
       <Bloco icon="chatbubbles-outline" title="Mural do condomínio" colors={colors} styles={styles}>Publicações, denúncias e moderação ficam vinculadas ao condomínio. Usuários banidos continuam podendo ler o mural, mas não publicar.</Bloco>
       <Bloco icon="shield-checkmark-outline" title="Separação por condomínio" colors={colors} styles={styles}>As regras do Firestore limitam leituras e alterações conforme o usuário, o perfil e o condomínio vinculado.</Bloco>
-      <Bloco icon="analytics-outline" title="Avaliação acadêmica" colors={colors} styles={styles}>As leituras confirmadas geram métricas de tempo, condições da imagem e acerto do primeiro candidato para avaliação do OCR no TCC.</Bloco>
+      <Bloco icon="analytics-outline" title="Avaliação acadêmica" colors={colors} styles={styles}>As leituras confirmadas geram métricas de tempo, condições da imagem e acerto do primeiro candidato para avaliação do OCR no TCC, sem armazenar a foto ou o texto bruto.</Bloco>
     </ScrollView>
   </SafeAreaView>;
 }
