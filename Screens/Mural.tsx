@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, where, writeBatch } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
@@ -39,12 +39,17 @@ export default function Mural({ navigation }: any) {
   const { perfil, user } = useAuth();
   const { colors } = useTheme();
   const isFocused = useIsFocused();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const ehPortaria = perfil?.tipo === 'porteiro';
+  const destaque = ehPortaria ? colors.porter : colors.accent;
+  const styles = useMemo(() => makeStyles(colors, ehPortaria), [colors, ehPortaria]);
   const [texto, setTexto] = useState('');
   const [busca, setBusca] = useState('');
   const [itens, setItens] = useState<any[]>([]);
   const [banido, setBanido] = useState(false);
+  const [banidos, setBanidos] = useState<Record<string, any>>({});
+  const [gerenciarBanidos, setGerenciarBanidos] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [processandoBanId, setProcessandoBanId] = useState('');
   const [denunciaItem, setDenunciaItem] = useState<any>(null);
   const [motivoDenuncia, setMotivoDenuncia] = useState('');
   const [detalhesDenuncia, setDetalhesDenuncia] = useState('');
@@ -53,7 +58,7 @@ export default function Mural({ navigation }: any) {
   useEffect(() => {
     if (!perfil?.condominioId) return;
     const q = query(collection(db, 'mural'), where('condominioId', '==', perfil.condominioId));
-    const unsubMural = onSnapshot(q, snap => {
+    return onSnapshot(q, snap => {
       const dados = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       dados.sort((a,b)=>{
         const bData = b.criadoEm?.seconds ? b.criadoEm.seconds * 1000 : b.criadoEmCliente || 0;
@@ -62,13 +67,33 @@ export default function Mural({ navigation }: any) {
       });
       setItens(dados);
     }, e => Alert.alert('Mural', mensagemErro(e, 'Não foi possível carregar as publicações.')));
+  }, [perfil?.condominioId]);
 
-    const unsubBan = onSnapshot(doc(db,'muralBanidos',idBanimento(perfil.condominioId,perfil.id)), snap => {
+  useEffect(() => {
+    if (!perfil?.condominioId || !user?.uid) {
+      setBanido(false);
+      return;
+    }
+    return onSnapshot(doc(db,'muralBanidos',idBanimento(perfil.condominioId,user.uid)), snap => {
       setBanido(snap.exists() && snap.data()?.ativo === true);
     },()=>setBanido(false));
+  }, [perfil?.condominioId, user?.uid]);
 
-    return()=>{unsubMural();unsubBan();};
-  }, [perfil?.condominioId, perfil?.id]);
+  useEffect(() => {
+    if (!perfil?.condominioId) {
+      setBanidos({});
+      return;
+    }
+    const q = query(collection(db, 'muralBanidos'), where('condominioId', '==', perfil.condominioId));
+    return onSnapshot(q, snap => {
+      const mapa:Record<string,any> = {};
+      snap.docs.forEach(d => {
+        const dado = d.data();
+        if (dado?.usuarioId && dado?.ativo === true) mapa[String(dado.usuarioId)] = { id:d.id, ...dado };
+      });
+      setBanidos(mapa);
+    }, () => setBanidos({}));
+  }, [perfil?.condominioId]);
 
   useEffect(() => {
     if (!isFocused || !user?.uid || !perfil?.condominioId) return;
@@ -79,6 +104,8 @@ export default function Mural({ navigation }: any) {
     const b = busca.trim().toLowerCase();
     return !b ? itens : itens.filter(i => `${i.autorNome || ''} ${i.texto || ''}`.toLowerCase().includes(b));
   }, [itens, busca]);
+
+  const banidosAtivos = useMemo(() => Object.values(banidos).sort((a:any,b:any) => String(a.usuarioNome||'').localeCompare(String(b.usuarioNome||''),'pt-BR')), [banidos]);
 
   async function publicar() {
     const t = texto.trim();
@@ -162,29 +189,33 @@ export default function Mural({ navigation }: any) {
     }
   }
 
-  async function banir(item: any) {
-    if (perfil?.tipo !== 'porteiro' || !perfil.condominioId || !user) return;
-    if (item.autorId === user.uid) return Alert.alert('Mural', 'Você não pode banir a própria conta.');
+  async function alterarBanimento(usuarioId:string, usuarioNome:string, ativo:boolean) {
+    if (!ehPortaria || !perfil?.condominioId || !user || !usuarioId) return;
+    if (usuarioId === user.uid) return Alert.alert('Mural', 'Você não pode banir a própria conta.');
     try {
-      await setDoc(doc(db, 'muralBanidos', idBanimento(perfil.condominioId,item.autorId)), {
-        usuarioId: item.autorId,
-        usuarioNome: item.autorNome || '',
+      setProcessandoBanId(usuarioId);
+      await setDoc(doc(db, 'muralBanidos', idBanimento(perfil.condominioId,usuarioId)), {
+        usuarioId,
+        usuarioNome: usuarioNome || 'Usuário',
         condominioId: perfil.condominioId,
-        ativo: true,
-        banidoPorId: user.uid,
-        banidoPorNome: perfil.nome || '',
-        criadoEm: serverTimestamp(),
+        ativo,
+        banidoPorId: ativo ? user.uid : '',
+        banidoPorNome: ativo ? (perfil.nome || 'Portaria') : '',
+        atualizadoEm: serverTimestamp(),
+        ...(ativo ? { banidoEm: serverTimestamp() } : { desbanidoEm: serverTimestamp(), desbanidoPorId:user.uid, desbanidoPorNome:perfil.nome || 'Portaria' }),
       }, { merge: true });
-      Alert.alert('Usuário banido', 'Esse usuário não poderá publicar novas mensagens neste mural.');
+      Alert.alert(ativo ? 'Usuário banido' : 'Banimento desfeito', ativo ? 'Esse usuário não poderá publicar novas mensagens neste mural.' : 'O usuário voltou a poder publicar no mural do condomínio.');
     } catch (e:any) {
-      Alert.alert('Mural', mensagemErro(e, 'Não foi possível banir o usuário.'));
+      Alert.alert('Mural', mensagemErro(e, ativo ? 'Não foi possível banir o usuário.' : 'Não foi possível desfazer o banimento.'));
+    } finally {
+      setProcessandoBanId('');
     }
   }
 
   function excluir(item:any){
     if (!user) return;
     const ehAutor = item.autorId === user.uid;
-    const podeExcluir = ehAutor || perfil?.tipo === 'porteiro';
+    const podeExcluir = ehAutor || ehPortaria;
     if (!podeExcluir) return;
 
     Alert.alert(
@@ -206,10 +237,16 @@ export default function Mural({ navigation }: any) {
         <Text style={styles.title}>Mural do condomínio</Text>
         <Text style={styles.subtitle}>{perfil.condominioNome || 'Condomínio'}</Text>
       </View>
-      <TouchableOpacity style={styles.reportCenter} onPress={()=>navigation.navigate('Denuncias')} accessibilityLabel="Abrir central de denúncias">
-        <Ionicons name="flag-outline" size={20} color={colors.warning}/>
-        <Text style={styles.reportCenterText}>Denúncias</Text>
-      </TouchableOpacity>
+      <View style={styles.headerActions}>
+        {ehPortaria && banidosAtivos.length>0 && <TouchableOpacity style={styles.bannedCenter} onPress={()=>setGerenciarBanidos(true)} accessibilityLabel="Gerenciar perfis banidos">
+          <Ionicons name="ban-outline" size={19} color={colors.danger}/>
+          <Text style={styles.bannedCenterText}>Banidos {banidosAtivos.length}</Text>
+        </TouchableOpacity>}
+        <TouchableOpacity style={styles.reportCenter} onPress={()=>navigation.navigate('Denuncias')} accessibilityLabel="Abrir central de denúncias">
+          <Ionicons name="flag-outline" size={20} color={colors.warning}/>
+          <Text style={styles.reportCenterText}>Denúncias</Text>
+        </TouchableOpacity>
+      </View>
     </View>
 
     <View style={styles.search}><Ionicons name="search-outline" size={18} color={colors.muted}/><TextInput style={styles.searchInput} placeholder="Pesquisar no mural" value={busca} onChangeText={setBusca}/></View>
@@ -239,11 +276,16 @@ export default function Mural({ navigation }: any) {
       ListEmptyComponent={<EmptyState icon="chatbubble-ellipses-outline" title="Mural vazio" text="Seja a primeira pessoa a publicar algo para o condomínio."/>}
       renderItem={({item})=>{
         const ehAutor = !!user && item.autorId === user.uid;
-        const podeExcluir = ehAutor || perfil.tipo === 'porteiro';
-        return <View style={styles.card}>
+        const podeExcluir = ehAutor || ehPortaria;
+        const autorBanido = !!banidos[item.autorId];
+        const processando = processandoBanId === item.autorId;
+        return <View style={[styles.card,autorBanido&&styles.cardBanned]}>
           <View style={styles.top}>
             <View style={{flex:1}}>
-              <Text style={styles.name}>{item.autorNome || 'Usuário'}</Text>
+              <View style={styles.nameLine}>
+                <Text style={[styles.name,autorBanido&&styles.nameBanned]}>{item.autorNome || 'Usuário'}</Text>
+                {autorBanido&&<View style={styles.bannedBadge}><Ionicons name="ban" size={12} color={colors.danger}/><Text style={styles.bannedBadgeText}>Perfil banido</Text></View>}
+              </View>
               <Text style={styles.role}>{item.autorTipo === 'porteiro' ? 'Portaria' : 'Morador'} · {dataPublicacao(item)}</Text>
             </View>
             {podeExcluir&&<TouchableOpacity onPress={()=>excluir(item)} accessibilityLabel="Excluir publicação"><Ionicons name="trash-outline" size={19} color={colors.danger}/></TouchableOpacity>}
@@ -251,7 +293,10 @@ export default function Mural({ navigation }: any) {
           <Text style={styles.body}>{item.texto}</Text>
           <View style={styles.actions}>
             {!ehAutor && <TouchableOpacity onPress={()=>abrirDenuncia(item)} style={styles.action}><Ionicons name="flag-outline" size={15} color={colors.warning}/><Text style={styles.actionText}>Denunciar</Text></TouchableOpacity>}
-            {perfil.tipo === 'porteiro' && !ehAutor && <TouchableOpacity onPress={()=>banir(item)} style={styles.action}><Ionicons name="ban-outline" size={15} color={colors.danger}/><Text style={[styles.actionText,{color:colors.danger}]}>Banir autor</Text></TouchableOpacity>}
+            {ehPortaria && !ehAutor && <TouchableOpacity onPress={()=>alterarBanimento(item.autorId,item.autorNome||'Usuário',!autorBanido)} style={styles.action} disabled={processando}>
+              <Ionicons name={autorBanido?'person-add-outline':'ban-outline'} size={15} color={autorBanido?colors.success:colors.danger}/>
+              <Text style={[styles.actionText,{color:autorBanido?colors.success:colors.danger}]}>{processando?'Processando...':autorBanido?'Desbanir autor':'Banir autor'}</Text>
+            </TouchableOpacity>}
           </View>
         </View>;
       }}
@@ -265,7 +310,7 @@ export default function Mural({ navigation }: any) {
             <TouchableOpacity onPress={()=>setDenunciaItem(null)}><Ionicons name="close" size={23} color={colors.muted}/></TouchableOpacity>
           </View>
           <View style={styles.reasonList}>
-            {MOTIVOS.map(motivo=><TouchableOpacity key={motivo} style={[styles.reason,motivoDenuncia===motivo&&styles.reasonActive]} onPress={()=>setMotivoDenuncia(motivo)}><Ionicons name={motivoDenuncia===motivo?'radio-button-on':'radio-button-off'} size={18} color={motivoDenuncia===motivo?colors.accent:colors.muted}/><Text style={styles.reasonText}>{motivo}</Text></TouchableOpacity>)}
+            {MOTIVOS.map(motivo=><TouchableOpacity key={motivo} style={[styles.reason,motivoDenuncia===motivo&&styles.reasonActive]} onPress={()=>setMotivoDenuncia(motivo)}><Ionicons name={motivoDenuncia===motivo?'radio-button-on':'radio-button-off'} size={18} color={motivoDenuncia===motivo?destaque:colors.muted}/><Text style={styles.reasonText}>{motivo}</Text></TouchableOpacity>)}
           </View>
           <TextInput style={styles.detailsInput} placeholder="Detalhes opcionais" value={detalhesDenuncia} onChangeText={setDetalhesDenuncia} multiline maxLength={300}/>
           <TouchableOpacity style={[styles.reportButton,(!motivoDenuncia||enviandoDenuncia)&&{opacity:.45}]} onPress={enviarDenuncia} disabled={!motivoDenuncia||enviandoDenuncia}>
@@ -274,9 +319,82 @@ export default function Mural({ navigation }: any) {
         </View>
       </View>
     </Modal>
+
+    <Modal visible={ehPortaria&&gerenciarBanidos} transparent animationType="fade" onRequestClose={()=>setGerenciarBanidos(false)}>
+      <View style={styles.modalBackdrop}>
+        <View style={styles.modalCard}>
+          <View style={styles.modalTop}>
+            <View style={{flex:1}}><Text style={styles.modalTitle}>Perfis banidos</Text><Text style={styles.modalHelp}>A Portaria pode desfazer um banimento a qualquer momento.</Text></View>
+            <TouchableOpacity onPress={()=>setGerenciarBanidos(false)}><Ionicons name="close" size={23} color={colors.muted}/></TouchableOpacity>
+          </View>
+          <ScrollView style={styles.bannedList} showsVerticalScrollIndicator={false}>
+            {banidosAtivos.length ? banidosAtivos.map((item:any)=><View key={item.usuarioId} style={styles.bannedPerson}>
+              <View style={styles.bannedPersonIcon}><Ionicons name="person-outline" size={19} color={colors.danger}/></View>
+              <View style={{flex:1}}><Text style={styles.bannedPersonName}>{item.usuarioNome||'Usuário'}</Text><Text style={styles.bannedPersonMeta}>Sem permissão para publicar no mural</Text></View>
+              <TouchableOpacity style={styles.unbanButton} onPress={()=>alterarBanimento(item.usuarioId,item.usuarioNome||'Usuário',false)} disabled={processandoBanId===item.usuarioId}>
+                <Text style={styles.unbanText}>{processandoBanId===item.usuarioId?'...':'Desbanir'}</Text>
+              </TouchableOpacity>
+            </View>) : <Text style={styles.modalHelp}>Não há perfis banidos neste condomínio.</Text>}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   </View>;
 }
 
-function makeStyles(colors:ThemeColors){return StyleSheet.create({
-  container:{flex:1,padding:20,paddingBottom:110,backgroundColor:colors.background},headingRow:{flexDirection:'row',alignItems:'flex-start',gap:10},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.8,color:colors.accent},title:{fontSize:34,fontWeight:'700',marginTop:3},subtitle:{fontSize:15,color:colors.muted,marginBottom:12},reportCenter:{alignItems:'center',justifyContent:'center',gap:3,minWidth:74,minHeight:54,paddingHorizontal:9,borderRadius:radius.medium,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},reportCenterText:{fontSize:11,fontWeight:'700',color:colors.warning},search:{height:48,borderRadius:radius.pill,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,flexDirection:'row',alignItems:'center',paddingHorizontal:14},searchInput:{flex:1,paddingHorizontal:8},compose:{flexDirection:'row',gap:8,alignItems:'flex-end',marginVertical:12},input:{flex:1,minHeight:50,maxHeight:110,backgroundColor:colors.surface,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,padding:12},send:{width:48,height:48,borderRadius:24,backgroundColor:colors.accent,alignItems:'center',justifyContent:'center'},communityRule:{fontSize:12,color:colors.muted,lineHeight:17,marginTop:-4,marginBottom:10},banned:{flexDirection:'row',gap:8,alignItems:'center',backgroundColor:colors.surfaceSoft,borderRadius:radius.medium,padding:12,marginBottom:10},bannedText:{flex:1,fontSize:14,color:colors.danger},card:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,padding:15,marginBottom:9},top:{flexDirection:'row',justifyContent:'space-between',gap:10},name:{fontSize:17,fontWeight:'700'},role:{fontSize:12,color:colors.muted,marginTop:2},body:{fontSize:16,lineHeight:22,marginTop:10},actions:{flexDirection:'row',gap:12,marginTop:12},action:{flexDirection:'row',alignItems:'center',gap:5},actionText:{fontSize:13,fontWeight:'700',color:colors.warning},modalBackdrop:{flex:1,backgroundColor:'rgba(0,0,0,0.45)',alignItems:'center',justifyContent:'center',padding:20},modalCard:{width:'100%',maxWidth:520,backgroundColor:colors.surface,borderRadius:radius.large,padding:18,borderWidth:1,borderColor:colors.border},modalTop:{flexDirection:'row',gap:10},modalTitle:{fontSize:23,fontWeight:'700'},modalHelp:{fontSize:14,lineHeight:19,color:colors.muted,marginTop:3},reasonList:{marginTop:13,gap:7},reason:{flexDirection:'row',alignItems:'center',gap:8,minHeight:44,paddingHorizontal:12,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,backgroundColor:colors.background},reasonActive:{borderColor:colors.accent,backgroundColor:colors.accentSoft},reasonText:{fontSize:15,fontWeight:'700'},detailsInput:{minHeight:76,maxHeight:110,backgroundColor:colors.background,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,padding:11,marginTop:11,textAlignVertical:'top'},reportButton:{height:48,borderRadius:radius.pill,backgroundColor:colors.warning,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7,marginTop:12},reportButtonText:{color:'#fff',fontSize:15,fontWeight:'700'}
-});}
+function makeStyles(colors:ThemeColors, ehPortaria:boolean){
+  const destaque=ehPortaria?colors.porter:colors.accent;
+  const destaqueSoft=ehPortaria?colors.porterSoft:colors.accentSoft;
+  return StyleSheet.create({
+    container:{flex:1,padding:20,paddingBottom:110,backgroundColor:colors.background},
+    headingRow:{flexDirection:'row',alignItems:'flex-start',gap:10},
+    eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.8,color:destaque},
+    title:{fontSize:34,fontWeight:'700',marginTop:3},
+    subtitle:{fontSize:15,color:colors.muted,marginBottom:12},
+    headerActions:{flexDirection:'row',alignItems:'flex-start',gap:6},
+    reportCenter:{alignItems:'center',justifyContent:'center',gap:3,minWidth:68,minHeight:54,paddingHorizontal:8,borderRadius:radius.medium,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},
+    reportCenterText:{fontSize:11,fontWeight:'700',color:colors.warning},
+    bannedCenter:{alignItems:'center',justifyContent:'center',gap:3,minWidth:68,minHeight:54,paddingHorizontal:8,borderRadius:radius.medium,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.danger},
+    bannedCenterText:{fontSize:11,fontWeight:'700',color:colors.danger},
+    search:{height:48,borderRadius:radius.pill,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,flexDirection:'row',alignItems:'center',paddingHorizontal:14},
+    searchInput:{flex:1,paddingHorizontal:8},
+    compose:{flexDirection:'row',gap:8,alignItems:'flex-end',marginVertical:12},
+    input:{flex:1,minHeight:50,maxHeight:110,backgroundColor:colors.surface,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,padding:12},
+    send:{width:48,height:48,borderRadius:24,backgroundColor:destaque,alignItems:'center',justifyContent:'center'},
+    communityRule:{fontSize:12,color:colors.muted,lineHeight:17,marginTop:-4,marginBottom:10},
+    banned:{flexDirection:'row',gap:8,alignItems:'center',backgroundColor:colors.surfaceSoft,borderRadius:radius.medium,padding:12,marginBottom:10,borderWidth:1,borderColor:colors.danger},
+    bannedText:{flex:1,fontSize:14,color:colors.danger},
+    card:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,padding:15,marginBottom:9},
+    cardBanned:{borderColor:colors.danger},
+    top:{flexDirection:'row',justifyContent:'space-between',gap:10},
+    nameLine:{flexDirection:'row',alignItems:'center',gap:7,flexWrap:'wrap'},
+    name:{fontSize:17,fontWeight:'700'},
+    nameBanned:{color:colors.danger},
+    bannedBadge:{flexDirection:'row',alignItems:'center',gap:4,paddingHorizontal:7,paddingVertical:3,borderRadius:radius.pill,backgroundColor:colors.surfaceSoft,borderWidth:1,borderColor:colors.danger},
+    bannedBadgeText:{fontSize:10,fontWeight:'700',color:colors.danger},
+    role:{fontSize:12,color:colors.muted,marginTop:2},
+    body:{fontSize:16,lineHeight:22,marginTop:10},
+    actions:{flexDirection:'row',gap:12,marginTop:12,flexWrap:'wrap'},
+    action:{flexDirection:'row',alignItems:'center',gap:5},
+    actionText:{fontSize:13,fontWeight:'700',color:colors.warning},
+    modalBackdrop:{flex:1,backgroundColor:'rgba(0,0,0,0.45)',alignItems:'center',justifyContent:'center',padding:20},
+    modalCard:{width:'100%',maxWidth:520,maxHeight:'82%',backgroundColor:colors.surface,borderRadius:radius.large,padding:18,borderWidth:1,borderColor:colors.border},
+    modalTop:{flexDirection:'row',gap:10},
+    modalTitle:{fontSize:23,fontWeight:'700'},
+    modalHelp:{fontSize:14,lineHeight:19,color:colors.muted,marginTop:3},
+    reasonList:{marginTop:13,gap:7},
+    reason:{flexDirection:'row',alignItems:'center',gap:8,minHeight:44,paddingHorizontal:12,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,backgroundColor:colors.background},
+    reasonActive:{borderColor:destaque,backgroundColor:destaqueSoft},
+    reasonText:{fontSize:15,fontWeight:'700'},
+    detailsInput:{minHeight:76,maxHeight:110,backgroundColor:colors.background,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,padding:11,marginTop:11,textAlignVertical:'top'},
+    reportButton:{height:48,borderRadius:radius.pill,backgroundColor:colors.warning,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7,marginTop:12},
+    reportButtonText:{color:'#fff',fontSize:15,fontWeight:'700'},
+    bannedList:{marginTop:14},
+    bannedPerson:{minHeight:62,flexDirection:'row',alignItems:'center',gap:10,paddingVertical:9,borderBottomWidth:1,borderBottomColor:colors.border},
+    bannedPersonIcon:{width:38,height:38,borderRadius:19,backgroundColor:colors.surfaceSoft,alignItems:'center',justifyContent:'center'},
+    bannedPersonName:{fontSize:16,fontWeight:'700',color:colors.danger},
+    bannedPersonMeta:{fontSize:12,color:colors.muted,marginTop:2},
+    unbanButton:{paddingHorizontal:11,paddingVertical:8,borderRadius:radius.pill,backgroundColor:destaqueSoft},
+    unbanText:{fontSize:12,fontWeight:'700',color:destaque},
+  });
+}
