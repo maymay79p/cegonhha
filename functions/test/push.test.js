@@ -30,6 +30,11 @@ test('monta push de chegada com dados de navegacao', () => {
   });
 });
 
+test('usa titulos claros para retirada solicitada e contestacao', () => {
+  assert.equal(tituloParaTipo('retirada_solicitada'), 'Morador informou retirada');
+  assert.equal(tituloParaTipo('contestacao_encomenda'), 'Encomenda contestada');
+});
+
 test('ignora dispositivo inativo ou token invalido', () => {
   const mensagens = montarMensagens({ tipo: 'denuncia', mensagem: 'Nova denúncia.' }, [
     { token: 'ExpoPushToken[ok]', ativo: false },
