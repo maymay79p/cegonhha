@@ -93,17 +93,19 @@ function calcularScore(dados: any, morador: any) {
 
 async function lerTextoMLKit(imagemUri: string) {
   if (!imagemUri) throw new Error('A imagem da etiqueta não foi encontrada.');
+
   try {
-    const modulo = await import('@react-native-ml-kit/text-recognition');
-    const TextRecognition = modulo.default;
-    const resultado = await TextRecognition.recognize(imagemUri);
+    // expo-ocr-kit usa Google ML Kit no Android, mas é implementado com a
+    // Expo Modules API, que é compatível com a Nova Arquitetura do SDK 57.
+    const modulo = await import('expo-ocr-kit');
+    const resultado = await modulo.recognizeText(imagemUri);
     const texto = String(resultado?.text || '').trim();
     if (!texto) throw new Error('Nenhum texto foi reconhecido. Tente uma foto mais nítida, reta e bem iluminada.');
     return texto;
   } catch (erro: any) {
     const mensagem = String(erro?.message || erro || '');
-    if (/native module|cannot find|not found|undefined|turbo/i.test(mensagem)) {
-      throw new Error('O OCR Google ML Kit precisa da development build do Cegonha e não funciona no Expo Go. O restante do app pode ser testado no Expo Go normalmente. Para habilitar o OCR, gere o APK com “npm run build:android” e depois use “npm run dev”.');
+    if (/native module|cannot find|not found|undefined|not linked|doesn.?t seem to be linked|expo go/i.test(mensagem)) {
+      throw new Error('O OCR está instalado, mas esta APK ainda não contém o módulo nativo novo. Rode “npm run rebuild:android” uma vez, instale a APK gerada e depois use apenas “npm start”.');
     }
     throw erro;
   }
