@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, where, writeBatch } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { marcarMuralComoVisto } from '../hooks/useTabBadges';
 import { AppText as Text, AppTextInput as TextInput } from '../components/AppText';
 import { EmptyState } from '../components/States';
 import { contemLinguagemImpropria } from '../utils/moderacao';
@@ -36,6 +38,7 @@ const MOTIVOS = ['Spam ou propaganda', 'Ofensa ou assédio', 'Conteúdo imprópr
 export default function Mural({ navigation }: any) {
   const { perfil, user } = useAuth();
   const { colors } = useTheme();
+  const isFocused = useIsFocused();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [texto, setTexto] = useState('');
   const [busca, setBusca] = useState('');
@@ -66,6 +69,11 @@ export default function Mural({ navigation }: any) {
 
     return()=>{unsubMural();unsubBan();};
   }, [perfil?.condominioId, perfil?.id]);
+
+  useEffect(() => {
+    if (!isFocused || !user?.uid || !perfil?.condominioId) return;
+    void marcarMuralComoVisto(user.uid, perfil.condominioId);
+  }, [isFocused, itens, user?.uid, perfil?.condominioId]);
 
   const exibidos = useMemo(() => {
     const b = busca.trim().toLowerCase();
