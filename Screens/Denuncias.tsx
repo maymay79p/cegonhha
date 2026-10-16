@@ -50,14 +50,13 @@ function mensagemErro(e: any, padrao: string) {
 export default function Denuncias({ navigation }: any) {
   const { perfil, user } = useAuth();
   const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const ehPortaria = perfil?.tipo === 'porteiro';
+  const styles = useMemo(() => makeStyles(colors, ehPortaria), [colors, ehPortaria]);
   const [itens, setItens] = useState<any[]>([]);
   const [banidos, setBanidos] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState<'todas' | 'pendente' | 'resolvidas'>('todas');
   const [processandoId, setProcessandoId] = useState('');
-
-  const ehPortaria = perfil?.tipo === 'porteiro';
 
   useEffect(() => {
     if (!perfil?.condominioId || !user) {
@@ -167,6 +166,7 @@ export default function Denuncias({ navigation }: any) {
         banidoPorId: ativo ? user.uid : '',
         banidoPorNome: ativo ? (perfil.nome || '') : '',
         atualizadoEm: serverTimestamp(),
+        ...(ativo ? { banidoEm: serverTimestamp() } : { desbanidoEm: serverTimestamp(), desbanidoPorId:user.uid, desbanidoPorNome:perfil.nome || 'Portaria' }),
       }, { merge: true });
       batch.update(doc(db, 'muralDenuncias', item.id), dadosResolucao(ativo ? 'autor_banido' : 'autor_desbanido'));
       await batch.commit();
@@ -213,7 +213,7 @@ export default function Denuncias({ navigation }: any) {
         return <View style={styles.card}>
           <View style={styles.cardTop}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.author}>Publicação de {item.autorNome || 'Usuário'}</Text>
+              <View style={styles.authorRow}><Text style={[styles.author,autorBanido&&styles.authorBanned]}>Publicação de {item.autorNome || 'Usuário'}</Text>{autorBanido&&<View style={styles.bannedBadge}><Ionicons name="ban" size={11} color={colors.danger}/><Text style={styles.bannedBadgeText}>Banido</Text></View>}</View>
               <Text style={styles.meta}>{dataDenuncia(item)}</Text>
             </View>
             <View style={[styles.status, status === 'pendente' ? styles.statusPending : styles.statusDone]}>
@@ -249,26 +249,32 @@ export default function Denuncias({ navigation }: any) {
   </View>;
 }
 
-function makeStyles(colors: ThemeColors) {
+function makeStyles(colors: ThemeColors, ehPortaria:boolean) {
+  const destaque=ehPortaria?colors.porter:colors.accent;
+  const destaqueSoft=ehPortaria?colors.porterSoft:colors.accentSoft;
   return StyleSheet.create({
     container: { flex: 1, padding: 20, paddingBottom: 100, backgroundColor: colors.background },
     header: { flexDirection: 'row', alignItems: 'center', gap: 11, marginTop: 4 },
     back: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-    eyebrow: { fontSize: 12, fontWeight: '700', letterSpacing: 1.7, color: colors.accent },
+    eyebrow: { fontSize: 12, fontWeight: '700', letterSpacing: 1.7, color: destaque },
     title: { fontSize: 31, fontWeight: '700', marginTop: 1 },
     subtitle: { fontSize: 15, lineHeight: 20, color: colors.muted, marginTop: 7, marginBottom: 13 },
     filters: { flexDirection: 'row', gap: 7, marginBottom: 13 },
     filter: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-    filterActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+    filterActive: { backgroundColor: destaque, borderColor: destaque },
     filterText: { fontSize: 13, fontWeight: '700', color: colors.text },
     filterTextActive: { color: '#fff' },
     card: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.medium, padding: 15, marginBottom: 10 },
     cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+    authorRow:{flexDirection:'row',alignItems:'center',gap:6,flexWrap:'wrap'},
     author: { fontSize: 17, fontWeight: '700' },
+    authorBanned:{color:colors.danger},
+    bannedBadge:{flexDirection:'row',alignItems:'center',gap:3,paddingHorizontal:6,paddingVertical:2,borderRadius:radius.pill,backgroundColor:colors.surfaceSoft,borderWidth:1,borderColor:colors.danger},
+    bannedBadgeText:{fontSize:10,fontWeight:'700',color:colors.danger},
     meta: { fontSize: 12, color: colors.muted, marginTop: 2 },
     status: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: radius.pill },
     statusPending: { backgroundColor: colors.surfaceSoft },
-    statusDone: { backgroundColor: colors.surfaceSoft },
+    statusDone: { backgroundColor: destaqueSoft },
     statusText: { fontSize: 11, fontWeight: '700' },
     label: { fontSize: 12, fontWeight: '700', color: colors.muted, marginTop: 13, textTransform: 'uppercase', letterSpacing: .5 },
     value: { fontSize: 15, fontWeight: '700', marginTop: 3 },
