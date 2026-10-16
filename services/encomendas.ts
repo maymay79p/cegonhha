@@ -6,8 +6,9 @@ import {
   query,
   runTransaction,
   serverTimestamp,
+  setDoc,
+  updateDoc,
   where,
-  writeBatch,
 } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { Encomenda, HistoricoEvento, OCRMeta } from '../types';
@@ -21,6 +22,12 @@ function agoraISO() {
 function evento(tipo: HistoricoEvento['tipo'], titulo: string, atorId?: string, atorNome?: string, observacao?: string): HistoricoEvento {
   return { tipo, titulo, data: agoraISO(), atorId, atorNome, observacao };
 }
+
+export type ResultadoRegistroChegada = {
+  id: string;
+  notificacaoCriada: boolean;
+  avisos: string[];
+};
 
 export async function buscarDuplicada(moradorId: string, condominioId: string) {
   if (!condominioId) return null;
@@ -47,27 +54,40 @@ export async function registrarChegada({ perfil, morador, descricao, textoOCR, f
   fotoEtiqueta?: string;
   ocrMeta?: OCRMeta;
   previsao?: any;
-}) {
+}): Promise<ResultadoRegistroChegada> {
   const uidAtual = auth.currentUser?.uid || perfil?.id || '';
   const condominioAtual = perfil?.condominioId || '';
   const descricaoLimpa = descricao.trim();
+
   if (!uidAtual || !condominioAtual) throw new Error('Sua conta de portaria está sem condomínio vinculado. Faça logout e login novamente.');
   if (perfil?.tipo !== 'porteiro') throw new Error('Apenas a portaria pode registrar encomendas.');
+  if (!morador?.id) throw new Error('Selecione um morador válido antes de confirmar a chegada.');
+  if (morador?.condominioId && morador.condominioId !== condominioAtual) {
+    throw new Error('O morador selecionado não pertence ao mesmo condomínio desta portaria. Atualize a lista e selecione novamente.');
+  }
   if (descricaoLimpa.length > LIMITE_DESCRICAO) throw new Error(`A descrição deve ter no máximo ${LIMITE_DESCRICAO} caracteres.`);
 
   const encomendaRef = doc(collection(db, 'encomendas'));
   const notificacaoRef = doc(collection(db, 'notificacoes'));
   const auditoriaRef = doc(collection(db, 'auditoria'));
-  const batch = writeBatch(db);
 
   const historico: HistoricoEvento[] = [];
   if (previsao) {
-    historico.push({ tipo:'prevista', titulo:'Prevista pelo morador', data:previsao.criadaEm?.toDate?.()?.toISOString?.() || agoraISO(), atorId:morador.id, atorNome:morador.nome, observacao:previsao.descricao || '' });
+    historico.push({
+      tipo: 'prevista',
+      titulo: 'Prevista pelo morador',
+      data: previsao.criadaEm?.toDate?.()?.toISOString?.() || agoraISO(),
+      atorId: morador.id,
+      atorNome: morador.nome,
+      observacao: previsao.descricao || '',
+    });
   }
   historico.push(evento('recebida', 'Recebida pela portaria', uidAtual, perfil.nome));
   historico.push(evento('pendente', 'Aguardando retirada', uidAtual, perfil.nome));
 
-  batch.set(encomendaRef, {
+  // A encomenda é o registro crítico. Ela é salva primeiro para que uma falha
+  // secundária (foto, telemetria OCR ou auditoria) nunca impeça a confirmação.
+  await setDoc(encomendaRef, {
     moradorId: morador.id,
     moradorNome: morador.nome,
     bloco: morador.bloco || '',
@@ -88,41 +108,54 @@ export async function registrarChegada({ perfil, morador, descricao, textoOCR, f
     lembrete3dEnviado: false,
   });
 
-  batch.set(notificacaoRef, {
-    destinatarioTipo: 'morador',
-    moradorId: morador.id,
-    condominioId: condominioAtual,
-    encomendaId: encomendaRef.id,
-    referenciaId: encomendaRef.id,
-    mensagem: `Sua encomenda chegou à portaria${descricaoLimpa ? `: ${descricaoLimpa}` : ''}.`,
-    tipo: 'chegada',
-    lida: false,
-    criadaEm: serverTimestamp(),
-  });
+  const avisos: string[] = [];
+  let notificacaoCriada = false;
 
-  batch.set(auditoriaRef, {
-    encomendaId: encomendaRef.id,
-    condominioId: condominioAtual,
-    moradorId: morador.id,
-    atorId: uidAtual,
-    atorNome: perfil.nome,
-    acao: 'chegada_registrada',
-    criadoEm: serverTimestamp(),
-  });
+  try {
+    await setDoc(notificacaoRef, {
+      destinatarioTipo: 'morador',
+      moradorId: morador.id,
+      condominioId: condominioAtual,
+      encomendaId: encomendaRef.id,
+      referenciaId: encomendaRef.id,
+      mensagem: `Sua encomenda chegou à portaria${descricaoLimpa ? `: ${descricaoLimpa}` : ''}.`,
+      tipo: 'chegada',
+      lida: false,
+      criadaEm: serverTimestamp(),
+    });
+    notificacaoCriada = true;
+  } catch (erro: any) {
+    const codigo = String(erro?.code || '');
+    avisos.push(codigo.includes('permission-denied')
+      ? 'A encomenda foi registrada, mas o aviso do morador foi bloqueado pelas regras do Firestore. Publique as regras atuais com npm run firebase:deploy.'
+      : 'A encomenda foi registrada, mas não foi possível criar o aviso do morador agora.');
+  }
+
+  const tarefasAuxiliares: Promise<unknown>[] = [
+    setDoc(auditoriaRef, {
+      encomendaId: encomendaRef.id,
+      condominioId: condominioAtual,
+      moradorId: morador.id,
+      atorId: uidAtual,
+      atorNome: perfil.nome,
+      acao: 'chegada_registrada',
+      criadoEm: serverTimestamp(),
+    }),
+  ];
 
   if (fotoEtiqueta) {
-    batch.set(doc(db, 'fotosEncomendas', encomendaRef.id), {
+    tarefasAuxiliares.push(setDoc(doc(db, 'fotosEncomendas', encomendaRef.id), {
       encomendaId: encomendaRef.id,
       moradorId: morador.id,
       condominioId: condominioAtual,
       foto: fotoEtiqueta,
       criadoEm: serverTimestamp(),
-    });
+    }));
   }
 
   if (ocrMeta) {
     const testeRef = doc(collection(db, 'ocrTestes'));
-    batch.set(testeRef, {
+    tarefasAuxiliares.push(setDoc(testeRef, {
       condominioId: condominioAtual,
       porteiroId: uidAtual,
       porteiroNome: perfil.nome || '',
@@ -145,21 +178,25 @@ export async function registrarChegada({ perfil, morador, descricao, textoOCR, f
       reconheceuBloco: ocrMeta.reconheceuBloco,
       reconheceuApartamento: ocrMeta.reconheceuApartamento,
       criadoEm: serverTimestamp(),
-    });
+    }));
 
     if (ocrMeta.leituraId) {
-      batch.update(doc(db, 'ocrLeituras', ocrMeta.leituraId), {
+      tarefasAuxiliares.push(updateDoc(doc(db, 'ocrLeituras', ocrMeta.leituraId), {
         confirmado: true,
         encomendaId: encomendaRef.id,
         moradorConfirmadoId: morador.id,
         moradorConfirmadoNome: morador.nome || '',
         confirmadoEm: serverTimestamp(),
-      });
+      }));
     }
   }
 
-  await batch.commit();
-  return encomendaRef.id;
+  const resultadosAuxiliares = await Promise.allSettled(tarefasAuxiliares);
+  if (resultadosAuxiliares.some(resultado => resultado.status === 'rejected')) {
+    avisos.push('A chegada foi salva. Alguns dados auxiliares de auditoria/OCR/foto não puderam ser gravados, mas isso não altera a encomenda.');
+  }
+
+  return { id: encomendaRef.id, notificacaoCriada, avisos };
 }
 
 export async function registrarRetirada(encomenda: Encomenda, perfil: any) {
