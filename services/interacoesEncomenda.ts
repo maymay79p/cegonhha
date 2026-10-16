@@ -13,12 +13,12 @@ function textoSeguro(valor: unknown) {
   return typeof valor === 'string' ? valor : valor == null ? '' : String(valor);
 }
 
-export function idSolicitacaoRetirada(encomendaId: string) {
-  return `${encomendaId}_retirada`;
+export function refSolicitacaoRetirada(encomendaId: string) {
+  return doc(db, 'encomendas', encomendaId, 'interacoes', 'retirada');
 }
 
-export function idContestacaoEncomenda(encomendaId: string) {
-  return `${encomendaId}_contestacao`;
+export function refContestacaoEncomenda(encomendaId: string) {
+  return doc(db, 'encomendas', encomendaId, 'interacoes', 'contestacao');
 }
 
 export async function solicitarConfirmacaoRetirada(encomenda: any, perfil: any) {
@@ -30,21 +30,16 @@ export async function solicitarConfirmacaoRetirada(encomenda: any, perfil: any) 
   }
 
   const encomendaRef = doc(db, 'encomendas', encomenda.id);
-  const interacaoRef = doc(db, 'interacoesEncomendas', idSolicitacaoRetirada(encomenda.id));
+  const interacaoRef = refSolicitacaoRetirada(encomenda.id);
   const notificacaoRef = doc(collection(db, 'notificacoes'));
 
   return runTransaction(db, async transaction => {
-    const [snapEncomenda, snapInteracao] = await Promise.all([
-      transaction.get(encomendaRef),
-      transaction.get(interacaoRef),
-    ]);
-
+    const snapEncomenda = await transaction.get(encomendaRef);
     if (!snapEncomenda.exists()) throw new Error('Encomenda não encontrada.');
     const atual = { id: snapEncomenda.id, ...snapEncomenda.data() } as any;
 
     if (atual.moradorId !== uid) throw new Error('Esta encomenda não pertence à sua conta.');
     if (atual.status !== 'pendente') throw new Error('Esta encomenda já possui uma retirada registrada.');
-    if (snapInteracao.exists()) return false;
 
     transaction.set(interacaoRef, {
       tipo: 'retirada_solicitada',
@@ -62,7 +57,7 @@ export async function solicitarConfirmacaoRetirada(encomenda: any, perfil: any) 
       condominioId: textoSeguro(atual.condominioId),
       moradorId: uid,
       encomendaId: atual.id,
-      referenciaId: interacaoRef.id,
+      referenciaId: 'retirada',
       remetenteId: uid,
       remetenteNome: nome,
       mensagem: `${nome} informou que retirou a encomenda${atual.codigoReferencia ? ` #${atual.codigoReferencia}` : ''}. Confirme a retirada na portaria.`,
@@ -84,20 +79,15 @@ export async function contestarEncomenda(encomenda: any, perfil: any, tipo: Tipo
   }
 
   const encomendaRef = doc(db, 'encomendas', encomenda.id);
-  const interacaoRef = doc(db, 'interacoesEncomendas', idContestacaoEncomenda(encomenda.id));
+  const interacaoRef = refContestacaoEncomenda(encomenda.id);
   const notificacaoRef = doc(collection(db, 'notificacoes'));
 
   return runTransaction(db, async transaction => {
-    const [snapEncomenda, snapInteracao] = await Promise.all([
-      transaction.get(encomendaRef),
-      transaction.get(interacaoRef),
-    ]);
-
+    const snapEncomenda = await transaction.get(encomendaRef);
     if (!snapEncomenda.exists()) throw new Error('Encomenda não encontrada.');
     const atual = { id: snapEncomenda.id, ...snapEncomenda.data() } as any;
 
     if (atual.moradorId !== uid) throw new Error('Esta encomenda não pertence à sua conta.');
-    if (snapInteracao.exists()) return false;
 
     const motivo = tipo === 'nao_retirei'
       ? 'Morador informa que não realizou a retirada registrada.'
@@ -121,7 +111,7 @@ export async function contestarEncomenda(encomenda: any, perfil: any, tipo: Tipo
       condominioId: textoSeguro(atual.condominioId),
       moradorId: uid,
       encomendaId: atual.id,
-      referenciaId: interacaoRef.id,
+      referenciaId: 'contestacao',
       remetenteId: uid,
       remetenteNome: nome,
       mensagem: `${nome} contestou a encomenda${atual.codigoReferencia ? ` #${atual.codigoReferencia}` : ''}: ${motivo}`,
@@ -136,7 +126,7 @@ export async function contestarEncomenda(encomenda: any, perfil: any, tipo: Tipo
 
 export async function confirmarSolicitacaoRetirada(encomendaId: string, perfil: any) {
   if (perfil?.tipo !== 'porteiro') return false;
-  const ref = doc(db, 'interacoesEncomendas', idSolicitacaoRetirada(encomendaId));
+  const ref = refSolicitacaoRetirada(encomendaId);
   try {
     await updateDoc(ref, {
       status: 'confirmada',
