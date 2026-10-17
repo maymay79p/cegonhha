@@ -73,10 +73,10 @@ export default function PorteiroHome({ navigation }: any) {
     <Text style={styles.eyebrow}>PORTARIA</Text><Text style={styles.title}>Visão de hoje</Text><Text style={styles.condo}>{perfil?.condominioNome || 'Condomínio'}{perfil?.condominioCodigo ? ' · ' + perfil.condominioCodigo : ''}</Text>
     {loading ? <LoadingCards count={2}/> : <>
       <View style={styles.grid}>
-        <TouchableOpacity style={styles.stat} onPress={()=>navigation.navigate('Home',{screen:'Encomendas',params:{filtroInicial:'hoje'}})}><Text style={styles.number}>{stats.recebidasHoje}</Text><Text style={styles.statLabel}>Recebidas hoje</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.stat} onPress={()=>navigation.navigate('Home',{screen:'Encomendas',params:{filtroInicial:'pendente'}})}><Text style={styles.number}>{stats.pendentes}</Text><Text style={styles.statLabel}>Aguardando retirada</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.stat} onPress={()=>navigation.navigate('Home',{screen:'Encomendas',params:{filtroInicial:'retiradasHoje'}})}><Text style={styles.number}>{stats.retiradasHoje}</Text><Text style={styles.statLabel}>Retiradas hoje</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.stat} onPress={()=>navigation.navigate('Home',{screen:'Encomendas',params:{filtroInicial:'atrasadas'}})}><Text style={[styles.number,stats.mais3>0&&{color:colors.warning}]}>{stats.mais3}</Text><Text style={styles.statLabel}>Há mais de 3 dias</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.stat} onPress={()=>navigation.navigate('Encomendas',{filtroInicial:'hoje'})}><Text style={styles.number}>{stats.recebidasHoje}</Text><Text style={styles.statLabel}>Recebidas hoje</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.stat} onPress={()=>navigation.navigate('Encomendas',{filtroInicial:'pendente'})}><Text style={styles.number}>{stats.pendentes}</Text><Text style={styles.statLabel}>Aguardando retirada</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.stat} onPress={()=>navigation.navigate('Encomendas',{filtroInicial:'retiradasHoje'})}><Text style={styles.number}>{stats.retiradasHoje}</Text><Text style={styles.statLabel}>Retiradas hoje</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.stat} onPress={()=>navigation.navigate('Encomendas',{filtroInicial:'atrasadas'})}><Text style={[styles.number,stats.mais3>0&&{color:colors.warning}]}>{stats.mais3}</Text><Text style={styles.statLabel}>Há mais de 3 dias</Text></TouchableOpacity>
       </View>
       <View style={styles.insight}><Ionicons name="time-outline" size={20} color={colors.info}/><View><Text style={styles.insightValue}>{stats.mediaHoras ? stats.mediaHoras.toFixed(1) + ' h' : 'Sem dados'}</Text><Text style={styles.insightText}>tempo médio entre chegada e retirada</Text></View></View>
     </>}
