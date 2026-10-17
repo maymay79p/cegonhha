@@ -1,7 +1,8 @@
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from './firebase';
 import { ResultadoOCR } from './types';
-import { calcularCompatibilidadeOCR, DadosEtiquetaOCR, extrairDadosEtiqueta } from './utils/ocrParser';
+import { calcularCompatibilidadeOCR, extrairDadosEtiqueta } from './utils/ocrParser';
+import type { DadosEtiquetaOCR } from './utils/ocrParser';
 
 const OCR_SPACE_ENDPOINT = 'https://api.ocr.space/parse/image';
 const OCR_SPACE_DEMO_KEY = 'helloworld';
