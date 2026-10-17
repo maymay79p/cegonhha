@@ -1,7 +1,7 @@
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from './firebase';
 import { ResultadoOCR } from './types';
-import { calcularCompatibilidadeOCR, extrairDadosEtiqueta } from './utils/ocrParser';
+import { calcularCompatibilidadeOCR, DadosEtiquetaOCR, extrairDadosEtiqueta } from './utils/ocrParser';
 
 const OCR_SPACE_ENDPOINT = 'https://api.ocr.space/parse/image';
 const OCR_SPACE_DEMO_KEY = 'helloworld';
@@ -99,17 +99,15 @@ async function lerTextoOCRSpace(imagemBase64: string, tipoTexto: 'impresso' | 'm
   }
 }
 
-export async function reconhecerEtiqueta(
-  imagemBase64: string,
+export async function recalcularCandidatosOCR(
+  dados: DadosEtiquetaOCR,
   condominioId: string,
-  tipoTexto: 'impresso' | 'manuscrito' = 'impresso',
-): Promise<ResultadoOCR> {
+  textoBruto = '',
+) {
   if (!condominioId) throw new Error('A conta da portaria ainda não está vinculada a um condomínio.');
 
-  const texto = await lerTextoOCRSpace(imagemBase64, tipoTexto);
-  const dados = extrairDadosEtiqueta(texto);
   const snap = await getDocs(query(collection(db, 'usuarios'), where('condominioId', '==', condominioId)));
-  const candidatos = snap.docs
+  return snap.docs
     .map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as any))
     .filter(m => m.tipo === 'morador')
     .map(m => ({
@@ -125,11 +123,23 @@ export async function reconhecerEtiqueta(
       condominioNome: m.condominioNome || '',
       condominioCodigo: m.condominioCodigo || '',
       fotoPerfil: m.fotoPerfil || '',
-      score: calcularCompatibilidadeOCR(dados, m, texto),
+      score: calcularCompatibilidadeOCR(dados, m, textoBruto),
     }))
     .filter(c => c.score >= 0.35)
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
+}
+
+export async function reconhecerEtiqueta(
+  imagemBase64: string,
+  condominioId: string,
+  tipoTexto: 'impresso' | 'manuscrito' = 'impresso',
+): Promise<ResultadoOCR> {
+  if (!condominioId) throw new Error('A conta da portaria ainda não está vinculada a um condomínio.');
+
+  const texto = await lerTextoOCRSpace(imagemBase64, tipoTexto);
+  const dados = extrairDadosEtiqueta(texto);
+  const candidatos = await recalcularCandidatosOCR(dados, condominioId, texto);
 
   return { texto, ...dados, candidatos, motor: 'ocr-space' };
 }
