@@ -9,10 +9,12 @@ import {
   setDoc,
   where,
 } from 'firebase/firestore';
+import * as Crypto from 'expo-crypto';
 import { auth, db } from '../firebase';
 import { Encomenda, HistoricoEvento, OCRMeta } from '../types';
 
 const LIMITE_DESCRICAO = 300;
+const LIMITE_RECEBEDOR = 120;
 
 function agoraISO() {
   return new Date().toISOString();
@@ -20,6 +22,12 @@ function agoraISO() {
 
 function textoSeguro(valor: unknown) {
   return typeof valor === 'string' ? valor : valor == null ? '' : String(valor);
+}
+
+async function gerarCodigoRetirada() {
+  const bytes = await Crypto.getRandomBytesAsync(4);
+  const bruto = bytes[0] * 16777216 + bytes[1] * 65536 + bytes[2] * 256 + bytes[3];
+  return String(100000 + (bruto % 900000));
 }
 
 function evento(
@@ -35,8 +43,6 @@ function evento(
     data: agoraISO(),
   };
 
-  // Firestore rejeita `undefined`, inclusive dentro de objetos em arrays.
-  // Só adicionamos os campos opcionais quando eles realmente possuem valor.
   if (atorId) item.atorId = atorId;
   if (atorNome) item.atorNome = atorNome;
   if (observacao) item.observacao = observacao;
@@ -90,6 +96,7 @@ export async function registrarChegada({ perfil, morador, descricao, ocrMeta, pr
   const encomendaRef = doc(collection(db, 'encomendas'));
   const notificacaoRef = doc(collection(db, 'notificacoes'));
   const auditoriaRef = doc(collection(db, 'auditoria'));
+  const codigoRetirada = await gerarCodigoRetirada();
 
   const historico: HistoricoEvento[] = [];
   if (previsao) {
@@ -105,8 +112,6 @@ export async function registrarChegada({ perfil, morador, descricao, ocrMeta, pr
   historico.push(evento('recebida', 'Recebida pela portaria', uidAtual, nomePorteiro));
   historico.push(evento('pendente', 'Aguardando retirada', uidAtual, nomePorteiro));
 
-  // A foto e o texto bruto do OCR nunca são persistidos. A encomenda guarda
-  // somente a origem e a pontuação de correspondência, quando houver OCR.
   await setDoc(encomendaRef, {
     moradorId: textoSeguro(morador.id),
     moradorNome: nomeMorador,
@@ -120,8 +125,11 @@ export async function registrarChegada({ perfil, morador, descricao, ocrMeta, pr
     porteiroNome: nomePorteiro,
     condominioId: condominioAtual,
     codigoReferencia: encomendaRef.id.slice(0, 8).toUpperCase(),
+    codigoRetirada,
+    codigoRetiradaConfirmado: false,
     previsaoId: textoSeguro(previsao?.id),
     recebidaEm: serverTimestamp(),
+    moradorNotificadoEm: null,
     retiradaEm: null,
     historico,
     lembrete3dEnviado: false,
@@ -137,12 +145,16 @@ export async function registrarChegada({ perfil, morador, descricao, ocrMeta, pr
       condominioId: condominioAtual,
       encomendaId: encomendaRef.id,
       referenciaId: encomendaRef.id,
-      mensagem: `Sua encomenda chegou à portaria${descricaoLimpa ? `: ${descricaoLimpa}` : ''}.`,
+      mensagem: `Sua encomenda chegou à portaria${descricaoLimpa ? `: ${descricaoLimpa}` : ''}. Abra os detalhes para consultar o código de retirada.`,
       tipo: 'chegada',
       lida: false,
       criadaEm: serverTimestamp(),
     });
     notificacaoCriada = true;
+    await setDoc(encomendaRef, {
+      moradorNotificadoEm: serverTimestamp(),
+      historico: arrayUnion(evento('notificada', 'Morador notificado', uidAtual, nomePorteiro)),
+    }, { merge: true });
   } catch (erro: any) {
     const codigo = String(erro?.code || '');
     avisos.push(codigo.includes('permission-denied')
@@ -155,9 +167,11 @@ export async function registrarChegada({ perfil, morador, descricao, ocrMeta, pr
       encomendaId: encomendaRef.id,
       condominioId: condominioAtual,
       moradorId: textoSeguro(morador.id),
+      alvoNome: nomeMorador,
       atorId: uidAtual,
       atorNome: nomePorteiro,
       acao: 'chegada_registrada',
+      detalhe: descricaoLimpa || 'Encomenda registrada na portaria',
       criadoEm: serverTimestamp(),
     }),
   ];
@@ -220,7 +234,12 @@ export async function registrarChegada({ perfil, morador, descricao, ocrMeta, pr
   return { id: encomendaRef.id, notificacaoCriada, avisos };
 }
 
-export async function registrarRetirada(encomenda: Encomenda, perfil: any) {
+export async function registrarRetirada(
+  encomenda: Encomenda,
+  perfil: any,
+  codigoRetiradaInformado = '',
+  recebedorNome = '',
+) {
   if (perfil?.tipo !== 'porteiro') throw new Error('Apenas a portaria pode registrar retiradas.');
   if (!perfil?.condominioId || encomenda.condominioId !== perfil.condominioId) throw new Error('Esta encomenda não pertence ao condomínio da portaria.');
 
@@ -229,6 +248,8 @@ export async function registrarRetirada(encomenda: Encomenda, perfil: any) {
   const auditoriaRef = doc(collection(db, 'auditoria'));
   const nomePorteiro = textoSeguro(perfil?.nome).trim();
   const porteiroId = textoSeguro(perfil?.id || auth.currentUser?.uid).trim();
+  const codigoInformado = textoSeguro(codigoRetiradaInformado).replace(/\D/g, '').slice(0, 6);
+  const recebedor = textoSeguro(recebedorNome).trim().slice(0, LIMITE_RECEBEDOR);
 
   return runTransaction(db, async transaction => {
     const snap = await transaction.get(encomendaRef);
@@ -237,12 +258,21 @@ export async function registrarRetirada(encomenda: Encomenda, perfil: any) {
     if (atual.condominioId !== perfil.condominioId) throw new Error('Esta encomenda não pertence ao condomínio da portaria.');
     if (atual.status !== 'pendente') return false;
 
-    const ev = evento('retirada', 'Retirada registrada', porteiroId, nomePorteiro);
+    const codigoEsperado = textoSeguro(atual.codigoRetirada).replace(/\D/g, '');
+    if (codigoEsperado) {
+      if (codigoInformado.length !== 6) throw new Error('Digite o código de retirada de 6 dígitos apresentado pelo morador.');
+      if (codigoInformado !== codigoEsperado) throw new Error('Código de retirada incorreto. Confira os 6 dígitos com o morador.');
+    }
+
+    const observacao = recebedor ? `Entregue a: ${recebedor}` : undefined;
+    const ev = evento('retirada', 'Retirada registrada', porteiroId, nomePorteiro, observacao);
     transaction.update(encomendaRef, {
       status: 'retirada',
       retiradaEm: serverTimestamp(),
       retiradaPorId: porteiroId,
       retiradaPorNome: nomePorteiro,
+      retiradaRecebedorNome: recebedor,
+      codigoRetiradaConfirmado: !!codigoEsperado,
       historico: arrayUnion(ev),
     });
     transaction.set(notificacaoRef, {
@@ -251,7 +281,7 @@ export async function registrarRetirada(encomenda: Encomenda, perfil: any) {
       condominioId: textoSeguro(atual.condominioId),
       encomendaId: atual.id,
       referenciaId: atual.id,
-      mensagem: 'A retirada da sua encomenda foi registrada pela portaria.',
+      mensagem: `A retirada da sua encomenda foi registrada pela portaria${recebedor ? ` para ${recebedor}` : ''}.`,
       tipo: 'retirada',
       lida: false,
       criadaEm: serverTimestamp(),
@@ -260,9 +290,12 @@ export async function registrarRetirada(encomenda: Encomenda, perfil: any) {
       encomendaId: atual.id,
       condominioId: textoSeguro(atual.condominioId),
       moradorId: textoSeguro(atual.moradorId),
+      alvoNome: textoSeguro(atual.moradorNome),
       atorId: porteiroId,
       atorNome: nomePorteiro,
       acao: 'retirada_registrada',
+      detalhe: recebedor ? `Retirada confirmada para ${recebedor}` : 'Retirada confirmada pela portaria',
+      codigoRetiradaConfirmado: !!codigoEsperado,
       criadoEm: serverTimestamp(),
     });
     return true;
@@ -306,9 +339,11 @@ export async function enviarLembreteAtrasado(encomenda: Encomenda, perfil: any) 
       encomendaId: atual.id,
       condominioId: textoSeguro(atual.condominioId),
       moradorId: textoSeguro(atual.moradorId),
+      alvoNome: textoSeguro(atual.moradorNome),
       atorId: porteiroId,
       atorNome: nomePorteiro,
       acao: 'lembrete_3_dias',
+      detalhe: 'Lembrete de retirada enviado ao morador',
       criadoEm: serverTimestamp(),
     });
     return true;
