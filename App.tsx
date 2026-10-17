@@ -18,6 +18,7 @@ import EncomendaForm from './Screens/EncomendaForm';
 import Detalhes from './Screens/Detalhes';
 import Notificacoes from './Screens/Notificacoes';
 import Relatorios from './Screens/Relatorios';
+import AtividadesPortaria from './Screens/AtividadesPortaria';
 import Denuncias from './Screens/Denuncias';
 import Perfil from './Screens/Perfil';
 import Previsoes from './Screens/Previsoes';
@@ -27,7 +28,9 @@ import PorteiroHome from './Screens/PorteiroHome';
 import PorteiroEncomendas from './Screens/PorteiroEncomendas';
 import SolicitacoesCondominio from './Screens/SolicitacoesCondominio';
 import PessoasCondominio from './Screens/PessoasCondominio';
+import PessoaDetalhes from './Screens/PessoaDetalhes';
 import Privacidade from './Screens/Privacidade';
+import Ajuda from './Screens/Ajuda';
 import Onboarding from './Screens/Onboarding';
 import Mural from './Screens/Mural';
 import Condominio from './Screens/Condominio';
@@ -214,13 +217,16 @@ function RootNavigator() {
       {perfil.tipo === 'porteiro' && <Stack.Screen name="EncomendaForm" component={EncomendaForm} />}
       <Stack.Screen name="Detalhes" component={Detalhes} />
       {perfil.tipo === 'porteiro' && <Stack.Screen name="Relatorios" component={Relatorios} options={stackSafe20} />}
+      {perfil.tipo === 'porteiro' && <Stack.Screen name="AtividadesPortaria" component={AtividadesPortaria} />}
       <Stack.Screen name="Denuncias" component={Denuncias} options={stackSafe20} />
       <Stack.Screen name="Notificacoes" component={Notificacoes} options={stackSafe20} />
       <Stack.Screen name="Perfil" component={Perfil} />
       {perfil.tipo === 'morador' && <Stack.Screen name="Previsoes" component={Previsoes} />}
       {perfil.tipo === 'porteiro' && <Stack.Screen name="SolicitacoesCondominio" component={SolicitacoesCondominio} options={stackSafe20} />}
       <Stack.Screen name="PessoasCondominio" component={PessoasCondominio} />
+      {perfil.tipo === 'porteiro' && <Stack.Screen name="PessoaDetalhes" component={PessoaDetalhes} />}
       <Stack.Screen name="Privacidade" component={Privacidade} />
+      <Stack.Screen name="Ajuda" component={Ajuda} />
       <Stack.Screen name="Mural" component={Mural} options={stackSafe20} />
       <Stack.Screen name="Condominio" component={Condominio} />
       <Stack.Screen name="CodigoCondominio" component={CodigoCondominio} />
