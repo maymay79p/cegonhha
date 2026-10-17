@@ -40,6 +40,7 @@ export default function SolicitacoesCondominio({ navigation }: any) {
       setProcessandoId(item.id);
       const solicitacaoRef = doc(db, 'solicitacoesCondominio', item.id);
       const notificacaoRef = doc(collection(db, 'notificacoes'));
+      const auditoriaRef = doc(collection(db, 'auditoria'));
       const batch = writeBatch(db);
       batch.update(solicitacaoRef, {
         status,
@@ -60,6 +61,16 @@ export default function SolicitacoesCondominio({ navigation }: any) {
         lida: false,
         criadaEm: serverTimestamp(),
       });
+      batch.set(auditoriaRef, {
+        condominioId: perfil.condominioId,
+        moradorId: item.moradorId,
+        alvoNome: item.moradorNome || 'Morador',
+        atorId: perfil.id,
+        atorNome: perfil.nome || 'Portaria',
+        acao: status === 'aprovada' ? 'vinculo_aprovado' : 'vinculo_rejeitado',
+        detalhe: status === 'aprovada' ? 'Solicitação de entrada aprovada' : 'Solicitação de entrada recusada',
+        criadoEm: serverTimestamp(),
+      });
       await batch.commit();
     } catch (e:any) {
       const codigo = String(e?.code || '');
@@ -73,7 +84,7 @@ export default function SolicitacoesCondominio({ navigation }: any) {
   const pendentes = itens.filter(i => i.status === 'pendente');
 
   return <SafeAreaView style={styles.safe}>
-    <View style={styles.header}><TouchableOpacity style={styles.back} onPress={() => navigation.goBack()} accessibilityLabel="Voltar"><Ionicons name="arrow-back" size={22} color={colors.text} /></TouchableOpacity><View><Text style={styles.eyebrow}>CONDOMÍNIO</Text><Text style={styles.title}>Solicitações de entrada</Text></View></View>
+    <View style={styles.header}><TouchableOpacity style={styles.back} onPress={() => navigation.goBack()} accessibilityLabel="Voltar"><Ionicons name="arrow-back" size={22} color={colors.text} /></TouchableOpacity><View style={{flex:1}}><Text style={styles.eyebrow}>CONDOMÍNIO</Text><Text style={styles.title}>Solicitações de entrada</Text><Text style={styles.subtitle}>Aprove somente moradores que pertencem ao condomínio.</Text></View></View>
     {loading ? <LoadingCards /> : <FlatList contentContainerStyle={styles.list} data={pendentes} keyExtractor={i => i.id} ListEmptyComponent={<EmptyState icon="people-outline" title="Tudo em dia" text="Não há moradores aguardando aprovação." />} renderItem={({item}) => {
       const ocupado = processandoId === item.id;
       return <View style={styles.card}>
@@ -85,5 +96,5 @@ export default function SolicitacoesCondominio({ navigation }: any) {
 }
 
 function makeStyles(colors:ThemeColors){return StyleSheet.create({
-  safe:{flex:1,backgroundColor:colors.background},header:{paddingHorizontal:20,paddingTop:8,flexDirection:'row',alignItems:'center',gap:12},back:{width:42,height:42,borderRadius:21,backgroundColor:colors.surface,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:colors.border},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.7,color:colors.porter},title:{fontSize:30,fontWeight:'700',color:colors.text},list:{padding:20,paddingBottom:40},card:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,padding:17,marginBottom:11},name:{fontSize:21,fontWeight:'700'},meta:{fontSize:15,color:colors.muted,marginTop:2},actions:{flexDirection:'row',gap:9,marginTop:15},reject:{flex:1,height:44,borderRadius:radius.pill,borderWidth:1,borderColor:colors.border,alignItems:'center',justifyContent:'center'},rejectText:{fontWeight:'700',color:colors.text},approve:{flex:1,height:44,borderRadius:radius.pill,backgroundColor:colors.porter,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:6},approveText:{fontWeight:'700',color:'#fff'},disabled:{opacity:.55}
+  safe:{flex:1,backgroundColor:colors.background},header:{paddingHorizontal:20,paddingTop:8,flexDirection:'row',alignItems:'flex-start',gap:12},back:{width:42,height:42,borderRadius:21,backgroundColor:colors.surface,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:colors.border},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.7,color:colors.porter},title:{fontSize:30,fontWeight:'700',color:colors.text},subtitle:{fontSize:13,color:colors.muted,marginTop:2},list:{padding:20,paddingBottom:40},card:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,padding:17,marginBottom:11},name:{fontSize:21,fontWeight:'700'},meta:{fontSize:15,color:colors.muted,marginTop:2},actions:{flexDirection:'row',gap:9,marginTop:15},reject:{flex:1,height:44,borderRadius:radius.pill,borderWidth:1,borderColor:colors.border,alignItems:'center',justifyContent:'center'},rejectText:{fontWeight:'700',color:colors.text},approve:{flex:1,height:44,borderRadius:radius.pill,backgroundColor:colors.porter,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:6},approveText:{fontWeight:'700',color:'#fff'},disabled:{opacity:.55}
 });}
