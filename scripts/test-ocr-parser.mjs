@@ -181,4 +181,27 @@ const scoreErrado = calcularCompatibilidadeOCR(dadosParciais, {
 assert.ok(scoreCorreto > scoreErrado, 'Compatibilidade deve favorecer o morador com nome/endereço compatíveis.');
 assert.ok(scoreCorreto >= 0.7, `Compatibilidade esperada >= 0.7, recebida ${scoreCorreto}`);
 
-console.log('Parser OCR validado: abreviações, recebedor/remetente, CPF, bloco, apartamento e ranking de morador.');
+// Simula a edição manual depois de uma leitura imperfeita. O ranking recalculado
+// deve considerar os valores corrigidos, sem depender do texto bruto antigo.
+const dadosCorrigidos = {
+  nome: 'Ana Clara Ribeiro',
+  cpf: '111.222.333-44',
+  bloco: '2',
+  apartamento: '1205',
+};
+const scoreCorrigidoCerto = calcularCompatibilidadeOCR(dadosCorrigidos, {
+  nome: 'Ana Clara Ribeiro',
+  cpf: '11122233344',
+  bloco: '2',
+  apartamento: '1205',
+}, '');
+const scoreCorrigidoErrado = calcularCompatibilidadeOCR(dadosCorrigidos, {
+  nome: 'Ana Paula Martins',
+  cpf: '99988877766',
+  bloco: '4',
+  apartamento: '305',
+}, '');
+assert.ok(scoreCorrigidoCerto > 0.95, `Correção manual deveria produzir compatibilidade alta; recebida ${scoreCorrigidoCerto}`);
+assert.ok(scoreCorrigidoCerto > scoreCorrigidoErrado, 'Após editar os dados, o morador corrigido deve liderar o ranking.');
+
+console.log('Parser OCR validado: abreviações, recebedor/remetente, CPF, bloco, apartamento, correção manual e ranking de morador.');
