@@ -19,7 +19,7 @@ export type Morador = {
 };
 
 export type HistoricoEvento = {
-  tipo: 'prevista' | 'recebida' | 'pendente' | 'retirada' | 'lembrete';
+  tipo: 'prevista' | 'recebida' | 'notificada' | 'pendente' | 'retirada' | 'lembrete';
   titulo: string;
   data: string;
   atorId?: string;
@@ -36,11 +36,15 @@ export type Encomenda = {
   descricao?: string;
   status: StatusEncomenda;
   recebidaEm?: any;
+  moradorNotificadoEm?: any;
   retiradaEm?: any;
   porteiroId: string;
   porteiroNome?: string;
   retiradaPorId?: string;
   retiradaPorNome?: string;
+  retiradaRecebedorNome?: string;
+  codigoRetirada?: string;
+  codigoRetiradaConfirmado?: boolean;
   ocrScore?: number;
   origem?: 'ocr' | 'manual';
   condominioId: string;
@@ -109,13 +113,16 @@ export type RootStackParamList = {
   } | undefined;
   Detalhes: { encomenda: Encomenda };
   Relatorios: undefined;
+  AtividadesPortaria: undefined;
   Denuncias: undefined;
   Notificacoes: undefined;
   Perfil: undefined;
   Previsoes: undefined;
   SolicitacoesCondominio: undefined;
   PessoasCondominio: undefined;
+  PessoaDetalhes: { pessoa: any };
   Privacidade: undefined;
+  Ajuda: undefined;
   Mural: undefined;
   Condominio: undefined;
   CodigoCondominio: undefined;
