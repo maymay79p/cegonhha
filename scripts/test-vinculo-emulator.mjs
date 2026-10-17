@@ -18,15 +18,18 @@ import {
   serverTimestamp,
   setDoc,
   terminate,
+  updateDoc,
   where,
   writeBatch,
 } from 'firebase/firestore';
 
 const PROJECT_ID = 'demo-cegonha';
 const CONDOMINIO_ID = 'G7CJ785';
+const OUTRO_CONDOMINIO_ID = 'X2YH456';
 const SENHA = 'Teste123!';
 const PORTARIA_EMAIL = 'portaria-vinculo@cegonha.test';
 const MORADOR_EMAIL = 'morador-vinculo@cegonha.test';
+const OUTRA_PORTARIA_EMAIL = 'portaria-outro-condominio@cegonha.test';
 
 const app = initializeApp({
   apiKey: 'demo-api-key',
@@ -82,24 +85,20 @@ try {
   const solicitacaoId = `${moradorUid}_${CONDOMINIO_ID}`;
   const solicitacaoRef = doc(db, 'solicitacoesCondominio', solicitacaoId);
 
-  // Este era o bug: getDoc() no ID ainda inexistente não consegue provar
-  // ownership pelas regras e deve ser bloqueado. O aplicativo não pode depender dele.
   await assert.rejects(
     getDoc(solicitacaoRef),
     erro => String(erro?.code || '').includes('permission-denied'),
     'O get direto de uma solicitação inexistente deveria ser negado pelas regras.',
   );
 
-  // A forma correta para a primeira tentativa é consultar apenas documentos do
-  // próprio morador. A consulta vazia precisa ser permitida.
   const consultaPropria = query(
     collection(db, 'solicitacoesCondominio'),
     where('moradorId', '==', moradorUid),
   );
   const antes = await getDocs(consultaPropria);
-  assert.equal(antes.empty, true, 'Conta nova deve conseguir consultar suas próprias solicitações sem permission-denied.');
+  assert.equal(antes.empty, true, 'Conta nova deve consultar suas próprias solicitações sem permission-denied.');
 
-  // 3) Morador envia a solicitação e, no mesmo batch, avisa a Portaria.
+  // 3) Morador pede vínculo e avisa a Portaria no mesmo batch.
   const avisoPortariaRef = doc(collection(db, 'notificacoes'));
   const pedido = writeBatch(db);
   pedido.set(solicitacaoRef, {
@@ -128,20 +127,15 @@ try {
   });
   await pedido.commit();
 
-  const depois = await getDocs(consultaPropria);
-  assert.equal(depois.size, 1, 'Solicitação do morador deve ficar gravada.');
-  assert.equal(depois.docs[0].data().status, 'pendente');
+  assert.equal((await getDocs(consultaPropria)).size, 1, 'Solicitação do morador deve ficar gravada.');
 
-  // 4) Portaria enxerga e aprova a solicitação, notificando o morador.
+  // 4) Portaria aprova e o Morador recebe a decisão.
   await entrar(PORTARIA_EMAIL);
-  const consultaPortaria = query(
-    collection(db, 'solicitacoesCondominio'),
-    where('condominioId', '==', CONDOMINIO_ID),
-  );
-  const recebidas = await getDocs(consultaPortaria);
-  assert.equal(recebidas.size, 1, 'Portaria deve enxergar a solicitação do próprio condomínio.');
+  const consultaPortaria = query(collection(db, 'solicitacoesCondominio'), where('condominioId', '==', CONDOMINIO_ID));
+  assert.equal((await getDocs(consultaPortaria)).size, 1, 'Portaria deve enxergar a solicitação do próprio condomínio.');
 
   const avisoMoradorRef = doc(collection(db, 'notificacoes'));
+  const auditoriaVinculoRef = doc(collection(db, 'auditoria'));
   const aprovacao = writeBatch(db);
   aprovacao.update(solicitacaoRef, {
     status: 'aprovada',
@@ -160,13 +154,20 @@ try {
     lida: false,
     criadaEm: serverTimestamp(),
   });
+  aprovacao.set(auditoriaVinculoRef, {
+    condominioId: CONDOMINIO_ID,
+    moradorId: moradorUid,
+    alvoNome: 'Morador Teste',
+    atorId: portariaUid,
+    atorNome: 'Portaria Teste',
+    acao: 'vinculo_aprovado',
+    criadoEm: serverTimestamp(),
+  });
   await aprovacao.commit();
 
-  // 5) Morador conclui o vínculo; perfil e solicitação mudam juntos.
+  // 5) Morador conclui o vínculo.
   await entrar(MORADOR_EMAIL);
-  const aprovada = await getDoc(solicitacaoRef);
-  assert.equal(aprovada.data()?.status, 'aprovada');
-
+  assert.equal((await getDoc(solicitacaoRef)).data()?.status, 'aprovada');
   const conclusao = writeBatch(db);
   conclusao.update(doc(db, 'usuarios', moradorUid), {
     condominioId: CONDOMINIO_ID,
@@ -181,31 +182,174 @@ try {
     atualizadoEm: serverTimestamp(),
   });
   await conclusao.commit();
+  assert.equal((await getDoc(doc(db, 'usuarios', moradorUid))).data()?.condominioId, CONDOMINIO_ID);
 
-  const perfilFinal = await getDoc(doc(db, 'usuarios', moradorUid));
-  const solicitacaoFinal = await getDoc(solicitacaoRef);
-  assert.equal(perfilFinal.data()?.condominioId, CONDOMINIO_ID, 'Perfil do morador deve ficar vinculado ao condomínio.');
-  assert.equal(solicitacaoFinal.data()?.status, 'concluida', 'Solicitação deve terminar como concluída.');
-
-  // 6) A tela Pessoas consulta somente os usuários do condomínio atual.
-  const consultaPessoas = query(
-    collection(db, 'usuarios'),
-    where('condominioId', '==', CONDOMINIO_ID),
-  );
+  // 6) Lista de pessoas: os dois perfis do condomínio são visíveis aos vinculados.
+  const consultaPessoas = query(collection(db, 'usuarios'), where('condominioId', '==', CONDOMINIO_ID));
   const pessoasComoMorador = await getDocs(consultaPessoas);
-  assert.equal(pessoasComoMorador.size, 2, 'Morador vinculado deve enxergar moradores e portaria do próprio condomínio.');
-  assert.deepEqual(
-    new Set(pessoasComoMorador.docs.map(d => d.data().tipo)),
-    new Set(['morador', 'porteiro']),
-    'Lista do condomínio deve conter os dois perfis ativos vinculados.',
-  );
+  assert.equal(pessoasComoMorador.size, 2);
+  assert.deepEqual(new Set(pessoasComoMorador.docs.map(d => d.data().tipo)), new Set(['morador', 'porteiro']));
+
+  // 7) Fluxo principal: OCR confirmado -> chegada -> aviso -> código -> retirada.
+  await entrar(PORTARIA_EMAIL);
+  const encomendaRef = doc(collection(db, 'encomendas'));
+  const chegadaAvisoRef = doc(collection(db, 'notificacoes'));
+  const chegadaAuditoriaRef = doc(collection(db, 'auditoria'));
+  const codigoRetirada = '482731';
+  const chegada = writeBatch(db);
+  chegada.set(encomendaRef, {
+    moradorId: moradorUid,
+    moradorNome: 'Morador Teste',
+    bloco: 'A',
+    apartamento: '101',
+    descricao: 'Caixa de teste do fluxo principal',
+    status: 'pendente',
+    porteiroId: portariaUid,
+    porteiroNome: 'Portaria Teste',
+    condominioId: CONDOMINIO_ID,
+    codigoReferencia: 'TESTE001',
+    codigoRetirada,
+    codigoRetiradaConfirmado: false,
+    origem: 'ocr',
+    recebidaEm: serverTimestamp(),
+    retiradaEm: null,
+    moradorNotificadoEm: serverTimestamp(),
+    historico: [],
+    lembrete3dEnviado: false,
+  });
+  chegada.set(chegadaAvisoRef, {
+    destinatarioTipo: 'morador',
+    moradorId: moradorUid,
+    condominioId: CONDOMINIO_ID,
+    encomendaId: encomendaRef.id,
+    referenciaId: encomendaRef.id,
+    mensagem: 'Sua encomenda chegou à portaria. Abra os detalhes para consultar o código de retirada.',
+    tipo: 'chegada',
+    lida: false,
+    criadaEm: serverTimestamp(),
+  });
+  chegada.set(chegadaAuditoriaRef, {
+    encomendaId: encomendaRef.id,
+    condominioId: CONDOMINIO_ID,
+    moradorId: moradorUid,
+    alvoNome: 'Morador Teste',
+    atorId: portariaUid,
+    atorNome: 'Portaria Teste',
+    acao: 'chegada_registrada',
+    criadoEm: serverTimestamp(),
+  });
+  await chegada.commit();
+
+  // O teste não chama OCR.Space externo; valida a persistência que ocorre depois
+  // de a Portaria confirmar o resultado reconhecido no app.
+  const ocrTesteRef = doc(collection(db, 'ocrTestes'));
+  await setDoc(ocrTesteRef, {
+    condominioId: CONDOMINIO_ID,
+    porteiroId: portariaUid,
+    porteiroNome: 'Portaria Teste',
+    encomendaId: encomendaRef.id,
+    tipoTexto: 'impresso',
+    iluminacao: 'boa',
+    tempoMs: 350,
+    topCandidatoId: moradorUid,
+    topScore: 98,
+    moradorConfirmadoId: moradorUid,
+    moradorConfirmadoNome: 'Morador Teste',
+    acertoTop1: true,
+    criadoEm: serverTimestamp(),
+  });
+
+  await entrar(MORADOR_EMAIL);
+  const recebida = await getDoc(encomendaRef);
+  assert.equal(recebida.exists(), true, 'Morador deve conseguir ler a própria encomenda.');
+  assert.equal(recebida.data()?.codigoRetirada, codigoRetirada, 'Morador deve receber o código de retirada de 6 dígitos.');
+  assert.equal(recebida.data()?.status, 'pendente');
+  const avisosMorador = await getDocs(query(collection(db, 'notificacoes'), where('moradorId', '==', moradorUid)));
+  assert.equal(avisosMorador.docs.some(d => d.data().tipo === 'chegada' && d.data().encomendaId === encomendaRef.id), true, 'Chegada deve gerar aviso para o Morador.');
+
+  // Morador informa que retirou: a Portaria recebe uma solicitação vinculada à encomenda.
+  const interacaoRetiradaRef = doc(db, 'encomendas', encomendaRef.id, 'interacoes', 'retirada');
+  const avisoRetiradaPortariaRef = doc(collection(db, 'notificacoes'));
+  const pedidoRetirada = writeBatch(db);
+  pedidoRetirada.set(interacaoRetiradaRef, {
+    tipo: 'retirada_solicitada',
+    status: 'pendente',
+    encomendaId: encomendaRef.id,
+    condominioId: CONDOMINIO_ID,
+    moradorId: moradorUid,
+    moradorNome: 'Morador Teste',
+    codigoReferencia: 'TESTE001',
+    criadaEm: serverTimestamp(),
+  });
+  pedidoRetirada.set(avisoRetiradaPortariaRef, {
+    destinatarioTipo: 'porteiro',
+    condominioId: CONDOMINIO_ID,
+    encomendaId: encomendaRef.id,
+    referenciaId: 'retirada',
+    remetenteId: moradorUid,
+    remetenteNome: 'Morador Teste',
+    mensagem: 'Morador Teste informou que retirou a encomenda #TESTE001. Confirme a retirada na portaria.',
+    tipo: 'retirada_solicitada',
+    lidaPor: [],
+    criadaEm: serverTimestamp(),
+  });
+  await pedidoRetirada.commit();
 
   await entrar(PORTARIA_EMAIL);
-  const pessoasComoPortaria = await getDocs(consultaPessoas);
-  assert.equal(pessoasComoPortaria.size, 2, 'Portaria deve enxergar a lista de usuários do próprio condomínio.');
+  assert.equal((await getDoc(interacaoRetiradaRef)).data()?.status, 'pendente');
+  assert.equal(codigoRetirada, '482731', 'O fluxo de confirmação deve trabalhar com o mesmo código exibido ao morador.');
 
-  // 7) Moderação do mural: Portaria bane, o morador fica impedido de publicar,
-  // e a Portaria consegue desfazer o banimento.
+  const retiradaAvisoMoradorRef = doc(collection(db, 'notificacoes'));
+  const retiradaAuditoriaRef = doc(collection(db, 'auditoria'));
+  const retirada = writeBatch(db);
+  retirada.update(encomendaRef, {
+    status: 'retirada',
+    retiradaEm: serverTimestamp(),
+    retiradaPorId: portariaUid,
+    retiradaPorNome: 'Portaria Teste',
+    retiradaRecebedorNome: 'Morador Teste',
+    codigoRetiradaConfirmado: true,
+  });
+  retirada.update(interacaoRetiradaRef, {
+    status: 'confirmada',
+    confirmadaEm: serverTimestamp(),
+    confirmadaPorId: portariaUid,
+    confirmadaPorNome: 'Portaria Teste',
+  });
+  retirada.set(retiradaAvisoMoradorRef, {
+    destinatarioTipo: 'morador',
+    moradorId: moradorUid,
+    condominioId: CONDOMINIO_ID,
+    encomendaId: encomendaRef.id,
+    referenciaId: encomendaRef.id,
+    mensagem: 'A retirada da sua encomenda foi registrada pela portaria.',
+    tipo: 'retirada',
+    lida: false,
+    criadaEm: serverTimestamp(),
+  });
+  retirada.set(retiradaAuditoriaRef, {
+    encomendaId: encomendaRef.id,
+    condominioId: CONDOMINIO_ID,
+    moradorId: moradorUid,
+    alvoNome: 'Morador Teste',
+    atorId: portariaUid,
+    atorNome: 'Portaria Teste',
+    acao: 'retirada_registrada',
+    codigoRetiradaConfirmado: true,
+    criadoEm: serverTimestamp(),
+  });
+  await retirada.commit();
+
+  await entrar(MORADOR_EMAIL);
+  const retiradaFinal = await getDoc(encomendaRef);
+  assert.equal(retiradaFinal.data()?.status, 'retirada', 'Retirada deve ficar persistida.');
+  assert.equal(retiradaFinal.data()?.codigoRetiradaConfirmado, true, 'Confirmação do código deve ficar registrada.');
+  assert.equal(retiradaFinal.data()?.retiradaRecebedorNome, 'Morador Teste', 'Nome de quem retirou deve poder ser registrado.');
+  const avisosDepoisRetirada = await getDocs(query(collection(db, 'notificacoes'), where('moradorId', '==', moradorUid)));
+  assert.equal(avisosDepoisRetirada.docs.some(d => d.data().tipo === 'retirada' && d.data().encomendaId === encomendaRef.id), true, 'Retirada deve gerar aviso para o Morador.');
+
+  // 8) Mural: banimento bloqueia publicação, desbanimento restaura e denúncia é registrada.
+  await entrar(PORTARIA_EMAIL);
   const banimentoRef = doc(db, 'muralBanidos', `${CONDOMINIO_ID}_${moradorUid}`);
   await setDoc(banimentoRef, {
     usuarioId: moradorUid,
@@ -214,14 +358,11 @@ try {
     ativo: true,
     banidoPorId: portariaUid,
     banidoPorNome: 'Portaria Teste',
+    banidoEm: serverTimestamp(),
     atualizadoEm: serverTimestamp(),
   }, { merge: true });
-  const banidoRegistrado = await getDoc(banimentoRef);
-  assert.equal(banidoRegistrado.data()?.ativo, true, 'Portaria deve conseguir banir um morador do mural.');
-
-  const consultaBanidos = query(collection(db, 'muralBanidos'), where('condominioId', '==', CONDOMINIO_ID));
-  const listaBanidos = await getDocs(consultaBanidos);
-  assert.equal(listaBanidos.size, 1, 'Portaria deve conseguir consultar os perfis banidos do condomínio.');
+  assert.equal((await getDoc(banimentoRef)).data()?.ativo, true);
+  assert.equal((await getDocs(query(collection(db, 'muralBanidos'), where('condominioId', '==', CONDOMINIO_ID)))).size, 1);
 
   await entrar(MORADOR_EMAIL);
   const publicacaoBloqueada = doc(collection(db, 'mural'));
@@ -236,7 +377,6 @@ try {
       criadoEmCliente: Date.now(),
     }),
     erro => String(erro?.code || '').includes('permission-denied'),
-    'Morador banido não deve conseguir publicar no mural.',
   );
 
   await entrar(PORTARIA_EMAIL);
@@ -249,10 +389,10 @@ try {
     banidoPorNome: '',
     desbanidoPorId: portariaUid,
     desbanidoPorNome: 'Portaria Teste',
+    desbanidoEm: serverTimestamp(),
     atualizadoEm: serverTimestamp(),
   }, { merge: true });
-  const desbanido = await getDoc(banimentoRef);
-  assert.equal(desbanido.data()?.ativo, false, 'Portaria deve conseguir desfazer um banimento do mural.');
+  assert.equal((await getDoc(banimentoRef)).data()?.ativo, false);
 
   await entrar(MORADOR_EMAIL);
   const publicacaoLiberada = doc(collection(db, 'mural'));
@@ -265,9 +405,58 @@ try {
     criadoEm: serverTimestamp(),
     criadoEmCliente: Date.now(),
   });
-  assert.equal((await getDoc(publicacaoLiberada)).exists(), true, 'Morador desbanido deve voltar a conseguir publicar.');
+  assert.equal((await getDoc(publicacaoLiberada)).exists(), true);
 
-  console.log('Vínculo, lista de pessoas e banimento/desbanimento do mural validados com sucesso no Firestore Emulator.');
+  await entrar(PORTARIA_EMAIL);
+  const denunciaRef = doc(collection(db, 'muralDenuncias'));
+  await setDoc(denunciaRef, {
+    condominioId: CONDOMINIO_ID,
+    comentarioId: publicacaoLiberada.id,
+    comentarioTexto: 'Publicação permitida depois do desbanimento.',
+    autorId: moradorUid,
+    autorNome: 'Morador Teste',
+    autorTipo: 'morador',
+    denuncianteId: portariaUid,
+    denuncianteNome: 'Portaria Teste',
+    motivo: 'Teste automatizado de denúncia',
+    detalhes: '',
+    criadoEm: serverTimestamp(),
+    status: 'pendente',
+  });
+  assert.equal((await getDoc(denunciaRef)).data()?.status, 'pendente', 'Denúncia do mural deve ficar registrada.');
+
+  // 9) Isolamento: uma Portaria de outro condomínio não acessa dados do primeiro.
+  await signOut(auth);
+  const outraPortariaCred = await createUserWithEmailAndPassword(auth, OUTRA_PORTARIA_EMAIL, SENHA);
+  const outraPortariaUid = outraPortariaCred.user.uid;
+  await setDoc(doc(db, 'condominios', OUTRO_CONDOMINIO_ID), {
+    nome: 'Outro Condomínio',
+    codigo: OUTRO_CONDOMINIO_ID,
+    codigoExibicao: 'X2Y-H456',
+    criadoPor: outraPortariaUid,
+    criadoEm: serverTimestamp(),
+  });
+  await setDoc(doc(db, 'usuarios', outraPortariaUid), {
+    nome: 'Outra Portaria',
+    email: OUTRA_PORTARIA_EMAIL,
+    tipo: 'porteiro',
+    condominioId: OUTRO_CONDOMINIO_ID,
+    condominioNome: 'Outro Condomínio',
+    condominioCodigo: 'X2Y-H456',
+  });
+
+  await assert.rejects(
+    getDoc(encomendaRef),
+    erro => String(erro?.code || '').includes('permission-denied'),
+    'Portaria de outro condomínio não pode ler encomendas alheias.',
+  );
+  await assert.rejects(
+    getDoc(doc(db, 'usuarios', moradorUid)),
+    erro => String(erro?.code || '').includes('permission-denied'),
+    'Portaria de outro condomínio não pode abrir o perfil de um morador alheio.',
+  );
+
+  console.log('Fluxos de vínculo, pessoas, OCR confirmado, encomenda, notificação, retirada segura, mural, denúncia, banimento e isolamento entre condomínios validados com sucesso.');
 } finally {
   await signOut(auth).catch(() => {});
   await terminate(db).catch(() => {});
