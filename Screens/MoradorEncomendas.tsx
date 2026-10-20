@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { AppText as Text, AppTextInput as TextInput } from '../components/AppText';
 import { EmptyState, LoadingCards } from '../components/States';
+import { correspondeBusca, montarTextoBuscaEncomenda } from '../utils/busca';
 import { radius, ThemeColors } from '../theme';
 
 type Filtro='todas'|'pendente'|'retirada'|'hoje';
@@ -35,12 +36,10 @@ export default function MoradorEncomendas({navigation}:any){
 
   const exibidos=useMemo(()=>{
     const hoje=new Date();hoje.setHours(0,0,0,0);
-    const b=busca.toLowerCase().trim();
     return itens.filter(i=>{
       const data=i.recebidaEm?.toDate?.()?.getTime?.()||0;
       const ok=filtro==='todas'||(filtro==='hoje'&&data>=hoje.getTime())||i.status===filtro;
-      const texto=((i.descricao||'')+' '+(i.codigoReferencia||'')+' '+(i.status||'')).toLowerCase();
-      return ok&&(!b||texto.includes(b));
+      return ok&&correspondeBusca(montarTextoBuscaEncomenda(i),busca);
     });
   },[itens,filtro,busca]);
 
@@ -50,7 +49,7 @@ export default function MoradorEncomendas({navigation}:any){
     <Text style={styles.eyebrow}>HISTÓRICO</Text>
     <Text style={styles.title}>Minhas encomendas</Text>
     <Text style={styles.subtitle}>{perfil?.condominioNome||'Sua conta'}</Text>
-    <View style={styles.search}><Ionicons name="search-outline" size={19} color={colors.muted}/><TextInput style={styles.searchInput} placeholder="Buscar descrição ou código" value={busca} onChangeText={setBusca}/></View>
+    <View style={styles.search}><Ionicons name="search-outline" size={19} color={colors.muted}/><TextInput style={styles.searchInput} placeholder="Descrição, código, bloco ou apartamento" value={busca} onChangeText={setBusca}/>{!!busca&&<TouchableOpacity onPress={()=>setBusca('')} accessibilityLabel="Limpar busca"><Ionicons name="close-circle" size={19} color={colors.muted}/></TouchableOpacity>}</View>
 
     <View style={styles.tabsShell}>
       <FlatList horizontal showsHorizontalScrollIndicator={false} data={filtros} keyExtractor={i=>i[0]} contentContainerStyle={styles.filters} renderItem={({item})=>{
@@ -61,9 +60,10 @@ export default function MoradorEncomendas({navigation}:any){
       }}/>
     </View>
 
-    {loading?<LoadingCards/>:<FlatList data={exibidos} keyExtractor={i=>i.id} contentContainerStyle={{paddingBottom:120}} ListEmptyComponent={<EmptyState icon="cube-outline" title="Nenhuma encomenda" text="Quando a portaria registrar uma chegada, ela aparecerá aqui automaticamente."/>} renderItem={({item})=><TouchableOpacity style={styles.card} onPress={()=>navigation.navigate('Detalhes',{encomenda:item})}>
+    {loading?<LoadingCards/>:<FlatList data={exibidos} keyExtractor={i=>i.id} contentContainerStyle={{paddingBottom:120}} ListEmptyComponent={<EmptyState icon="cube-outline" title="Nenhuma encomenda" text="Nenhuma encomenda corresponde à aba ou à pesquisa atual."/>} renderItem={({item})=><TouchableOpacity style={styles.card} onPress={()=>navigation.navigate('Detalhes',{encomenda:item})}>
       <View style={styles.top}><Text style={styles.cardTitle}>{item.status==='retirada'?'Encomenda retirada':'Aguardando na portaria'}</Text><View style={[styles.dot,item.status==='retirada'?styles.dotDone:styles.dotPending]}/></View>
       {!!item.descricao&&<Text style={styles.desc}>{item.descricao}</Text>}
+      {(item.bloco||item.apartamento)&&<Text style={styles.location}>Bloco {item.bloco||'—'} · Ap. {item.apartamento||'—'}</Text>}
       <View style={styles.bottom}><Text style={styles.code}>{item.codigoReferencia?'#'+item.codigoReferencia:''}</Text><Text style={styles.date}>{item.recebidaEm?.toDate?.().toLocaleString('pt-BR')||''}</Text></View>
     </TouchableOpacity>}/>}  
   </View>;
@@ -74,7 +74,7 @@ function makeStyles(colors:ThemeColors){return StyleSheet.create({
   eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.8,color:colors.accent},
   title:{fontSize:34,fontWeight:'700',marginTop:3},
   subtitle:{fontSize:16,color:colors.muted,marginBottom:13},
-  search:{height:50,borderRadius:radius.pill,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,flexDirection:'row',alignItems:'center',paddingHorizontal:15},
+  search:{minHeight:50,borderRadius:radius.pill,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,flexDirection:'row',alignItems:'center',paddingHorizontal:15},
   searchInput:{flex:1,borderWidth:0,backgroundColor:'transparent',paddingHorizontal:10},
   tabsShell:{marginTop:12,marginBottom:12,borderBottomWidth:1,borderBottomColor:colors.border},
   filters:{paddingHorizontal:2,gap:4},
@@ -89,6 +89,7 @@ function makeStyles(colors:ThemeColors){return StyleSheet.create({
   dotPending:{backgroundColor:colors.warning},
   dotDone:{backgroundColor:colors.success},
   desc:{fontSize:15,color:colors.muted,marginTop:5},
+  location:{fontSize:13,color:colors.muted,marginTop:4},
   bottom:{flexDirection:'row',justifyContent:'space-between',marginTop:12},
   code:{fontSize:12,fontWeight:'700',color:colors.muted},
   date:{fontSize:12,color:colors.muted}
