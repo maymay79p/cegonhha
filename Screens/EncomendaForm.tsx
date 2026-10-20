@@ -9,6 +9,7 @@ import { AppText as Text, AppTextInput as TextInput } from '../components/AppTex
 import { KeyboardScreen } from '../components/KeyboardScreen';
 import { EmptyState } from '../components/States';
 import { buscarDuplicada, registrarChegada } from '../services/encomendas';
+import { correspondeBusca, montarTextoBuscaPessoa } from '../utils/busca';
 import { radius, ThemeColors } from '../theme';
 
 const LIMITE_DESCRICAO = 300;
@@ -68,10 +69,9 @@ export default function EncomendaForm({ navigation, route }: any) {
   },[selecionado?.id,perfil?.condominioId]);
 
   const filtrados = useMemo(() => {
-    const b = busca.toLowerCase().trim();
-    if (!b) return moradores.slice(0,30);
+    if (!busca.trim()) return moradores.slice(0,30);
     return moradores
-      .filter(m => ((m.nome||'')+' '+(m.bloco||'')+' '+(m.apartamento||'')+' '+(m.email||'')+' '+(m.cpf||'')).toLowerCase().includes(b))
+      .filter(m => correspondeBusca(montarTextoBuscaPessoa(m), busca))
       .slice(0,30);
   }, [moradores,busca]);
 
@@ -132,7 +132,7 @@ export default function EncomendaForm({ navigation, route }: any) {
   if (perfil?.tipo !== 'porteiro') return null;
 
   return <KeyboardScreen contentContainerStyle={styles.screen}>
-    <View style={styles.header}><TouchableOpacity style={styles.back} onPress={()=>navigation.goBack()}><Ionicons name="arrow-back" size={22} color={colors.text}/></TouchableOpacity><View><Text style={styles.eyebrow}>PORTARIA</Text><Text style={styles.title}>Registrar chegada</Text></View></View>
+    <View style={styles.header}><TouchableOpacity style={styles.back} onPress={()=>navigation.goBack()} accessibilityLabel="Voltar"><Ionicons name="arrow-back" size={22} color={colors.text}/></TouchableOpacity><View><Text style={styles.eyebrow}>PORTARIA</Text><Text style={styles.title}>Registrar chegada</Text></View></View>
     {!!ocrMeta && <View style={styles.ocrBadge}><Ionicons name="scan-outline" size={17} color={colors.info}/><Text style={styles.ocrText}>Dados originados do OCR. A foto da etiqueta não é salva; confirme o morador antes de registrar.</Text></View>}
 
     {selecionado ? <View style={styles.selected}>
@@ -140,8 +140,8 @@ export default function EncomendaForm({ navigation, route }: any) {
       <View style={{flex:1}}><Text style={styles.name}>{selecionado.nome}</Text><Text style={styles.meta}>CPF {selecionado.cpf||'não informado'} · Bloco {selecionado.bloco||'-'} · Ap. {selecionado.apartamento||'-'}</Text></View>
       <TouchableOpacity onPress={()=>{setSelecionado(null);setPrevisaoSelecionada(null);}}><Text style={styles.change}>Trocar</Text></TouchableOpacity>
     </View> : <>
-      <TextInput style={styles.input} placeholder="Buscar nome, CPF, bloco, apartamento ou e-mail" value={busca} onChangeText={setBusca} returnKeyType="search"/>
-      {!filtrados.length ? <EmptyState icon="search-outline" title="Nenhum morador encontrado" text="Confira a busca ou verifique se o morador está vinculado a este condomínio."/> : <View style={styles.peopleList}>{filtrados.map(item=><TouchableOpacity key={item.id} style={styles.item} onPress={()=>setSelecionado(item)}><Text style={styles.name}>{item.nome}</Text><Text style={styles.meta}>CPF {item.cpf||'—'} · Bloco {item.bloco||'-'} · Ap. {item.apartamento||'-'}</Text></TouchableOpacity>)}</View>}
+      <View style={styles.searchRow}><Ionicons name="search-outline" size={19} color={colors.muted}/><TextInput style={styles.searchInput} placeholder="Nome, CPF, bloco, apartamento ou e-mail" value={busca} onChangeText={setBusca} returnKeyType="search"/>{!!busca&&<TouchableOpacity onPress={()=>setBusca('')} accessibilityLabel="Limpar busca"><Ionicons name="close-circle" size={19} color={colors.muted}/></TouchableOpacity>}</View>
+      {!filtrados.length ? <EmptyState icon="search-outline" title="Nenhum morador encontrado" text="Tente nome, CPF, “bloco A”, “apto 203” ou confira se o morador está vinculado ao condomínio."/> : <View style={styles.peopleList}>{filtrados.map(item=><TouchableOpacity key={item.id} style={styles.item} onPress={()=>setSelecionado(item)} accessibilityLabel={`${item.nome}, bloco ${item.bloco || 'não informado'}, apartamento ${item.apartamento || 'não informado'}`}><Text style={styles.name}>{item.nome}</Text><Text style={styles.meta}>CPF {item.cpf||'—'} · Bloco {item.bloco||'-'} · Ap. {item.apartamento||'-'}</Text></TouchableOpacity>)}</View>}
     </>}
 
     {!!selecionado && previsoes.length>0 && <View style={styles.forecastBox}>
@@ -155,5 +155,5 @@ export default function EncomendaForm({ navigation, route }: any) {
 }
 
 function makeStyles(colors:ThemeColors){return StyleSheet.create({
-  screen:{padding:20,paddingTop:16,paddingBottom:100,backgroundColor:colors.background},header:{paddingTop:8,flexDirection:'row',alignItems:'center',gap:12,marginBottom:16},back:{width:42,height:42,borderRadius:21,backgroundColor:colors.surface,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:colors.border},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.7,color:colors.porter},title:{fontSize:30,fontWeight:'700'},ocrBadge:{flexDirection:'row',gap:8,backgroundColor:colors.surfaceSoft,borderRadius:radius.medium,padding:13,marginBottom:13},ocrText:{flex:1,fontSize:14,color:colors.info,lineHeight:19},selected:{flexDirection:'row',alignItems:'center',backgroundColor:colors.surface,borderRadius:radius.large,padding:15,borderWidth:1,borderColor:colors.border},avatar:{width:44,height:44,borderRadius:22,backgroundColor:colors.porterSoft,alignItems:'center',justifyContent:'center',marginRight:10},avatarText:{fontSize:20,fontWeight:'700',color:colors.porter},name:{fontSize:18,fontWeight:'700'},meta:{fontSize:14,color:colors.muted,marginTop:2},change:{fontWeight:'700',color:colors.accent},input:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,paddingHorizontal:15,paddingVertical:13},peopleList:{marginTop:8},item:{backgroundColor:colors.surface,padding:14,borderRadius:radius.medium,marginBottom:8,borderWidth:1,borderColor:colors.border},forecastBox:{backgroundColor:colors.surface,borderRadius:radius.medium,padding:14,borderWidth:1,borderColor:colors.border,marginTop:12},forecastTitle:{fontSize:17,fontWeight:'700'},forecastHelp:{fontSize:13,color:colors.muted,lineHeight:18,marginTop:2,marginBottom:8},forecastItem:{flexDirection:'row',alignItems:'center',gap:9,padding:10,borderRadius:radius.small,marginTop:5,backgroundColor:colors.surfaceSoft},forecastActive:{borderWidth:1,borderColor:colors.success},forecastName:{fontSize:15,fontWeight:'700'},button:{height:52,borderRadius:radius.pill,backgroundColor:colors.porter,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7,marginTop:14},buttonText:{color:'#fff',fontSize:17,fontWeight:'700'}
+  screen:{padding:20,paddingTop:16,paddingBottom:100,backgroundColor:colors.background},header:{paddingTop:8,flexDirection:'row',alignItems:'center',gap:12,marginBottom:16},back:{width:42,height:42,borderRadius:21,backgroundColor:colors.surface,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:colors.border},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.7,color:colors.porter},title:{fontSize:30,fontWeight:'700'},ocrBadge:{flexDirection:'row',gap:8,backgroundColor:colors.surfaceSoft,borderRadius:radius.medium,padding:13,marginBottom:13},ocrText:{flex:1,fontSize:14,color:colors.info,lineHeight:19},selected:{flexDirection:'row',alignItems:'center',backgroundColor:colors.surface,borderRadius:radius.large,padding:15,borderWidth:1,borderColor:colors.border},avatar:{width:44,height:44,borderRadius:22,backgroundColor:colors.porterSoft,alignItems:'center',justifyContent:'center',marginRight:10},avatarText:{fontSize:20,fontWeight:'700',color:colors.porter},name:{fontSize:18,fontWeight:'700'},meta:{fontSize:14,color:colors.muted,marginTop:2},change:{fontWeight:'700',color:colors.porter},input:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,paddingHorizontal:15,paddingVertical:13},searchRow:{minHeight:50,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,paddingHorizontal:13,flexDirection:'row',alignItems:'center',gap:8},searchInput:{flex:1,borderWidth:0,paddingVertical:9},peopleList:{marginTop:8},item:{backgroundColor:colors.surface,padding:14,borderRadius:radius.medium,marginBottom:8,borderWidth:1,borderColor:colors.border},forecastBox:{backgroundColor:colors.surface,borderRadius:radius.medium,padding:14,borderWidth:1,borderColor:colors.border,marginTop:12},forecastTitle:{fontSize:17,fontWeight:'700'},forecastHelp:{fontSize:13,color:colors.muted,lineHeight:18,marginTop:2,marginBottom:8},forecastItem:{flexDirection:'row',alignItems:'center',gap:9,padding:10,borderRadius:radius.small,marginTop:5,backgroundColor:colors.surfaceSoft},forecastActive:{borderWidth:1,borderColor:colors.success},forecastName:{fontSize:15,fontWeight:'700'},button:{minHeight:52,borderRadius:radius.pill,backgroundColor:colors.porter,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7,marginTop:14},buttonText:{color:'#fff',fontSize:17,fontWeight:'700'}
 });}
