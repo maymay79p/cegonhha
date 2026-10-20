@@ -6,8 +6,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { AppText as Text } from '../components/AppText';
+import { AppText as Text, AppTextInput as TextInput } from '../components/AppText';
 import { EmptyState, LoadingCards } from '../components/States';
+import { correspondeBusca, montarTextoBuscaPessoa } from '../utils/busca';
 import { radius, ThemeColors } from '../theme';
 
 export default function SolicitacoesCondominio({ navigation }: any) {
@@ -15,6 +16,7 @@ export default function SolicitacoesCondominio({ navigation }: any) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [itens, setItens] = useState<any[]>([]);
+  const [busca, setBusca] = useState('');
   const [loading, setLoading] = useState(true);
   const [processandoId, setProcessandoId] = useState('');
 
@@ -72,6 +74,7 @@ export default function SolicitacoesCondominio({ navigation }: any) {
         criadoEm: serverTimestamp(),
       });
       await batch.commit();
+      // A lista é em tempo real; o item some assim que deixa de estar pendente.
     } catch (e:any) {
       const codigo = String(e?.code || '');
       Alert.alert('Solicitação', codigo.includes('permission-denied') ? 'O Firestore bloqueou a operação. Publique as regras mais recentes do Cegonha.' : e?.message || 'Não foi possível atualizar a solicitação.');
@@ -82,10 +85,16 @@ export default function SolicitacoesCondominio({ navigation }: any) {
 
   if (perfil?.tipo !== 'porteiro') return null;
   const pendentes = itens.filter(i => i.status === 'pendente');
+  const exibidas = pendentes.filter(item => correspondeBusca(montarTextoBuscaPessoa({
+    ...item,
+    nome: item.moradorNome,
+    tipo: 'morador',
+  }), busca));
 
   return <SafeAreaView style={styles.safe}>
     <View style={styles.header}><TouchableOpacity style={styles.back} onPress={() => navigation.goBack()} accessibilityLabel="Voltar"><Ionicons name="arrow-back" size={22} color={colors.text} /></TouchableOpacity><View style={{flex:1}}><Text style={styles.eyebrow}>CONDOMÍNIO</Text><Text style={styles.title}>Solicitações de entrada</Text><Text style={styles.subtitle}>Aprove somente moradores que pertencem ao condomínio.</Text></View></View>
-    {loading ? <LoadingCards /> : <FlatList contentContainerStyle={styles.list} data={pendentes} keyExtractor={i => i.id} ListEmptyComponent={<EmptyState icon="people-outline" title="Tudo em dia" text="Não há moradores aguardando aprovação." />} renderItem={({item}) => {
+    <View style={styles.search}><Ionicons name="search-outline" size={19} color={colors.muted}/><TextInput style={styles.searchInput} placeholder="Nome, bloco, apartamento ou e-mail" value={busca} onChangeText={setBusca}/>{!!busca&&<TouchableOpacity onPress={()=>setBusca('')} accessibilityLabel="Limpar busca"><Ionicons name="close-circle" size={19} color={colors.muted}/></TouchableOpacity>}</View>
+    {loading ? <LoadingCards /> : <FlatList contentContainerStyle={styles.list} data={exibidas} keyExtractor={i => i.id} ListEmptyComponent={<EmptyState icon="people-outline" title={pendentes.length ? 'Nenhuma solicitação encontrada' : 'Tudo em dia'} text={pendentes.length ? 'Tente buscar por nome, bloco, apartamento ou e-mail.' : 'Não há moradores aguardando aprovação.'} />} renderItem={({item}) => {
       const ocupado = processandoId === item.id;
       return <View style={styles.card}>
         <Text style={styles.name}>{item.moradorNome}</Text><Text style={styles.meta}>Bloco {item.bloco || '-'} · Ap. {item.apartamento || '-'}</Text><Text style={styles.meta}>{item.email || ''}</Text>
@@ -96,5 +105,5 @@ export default function SolicitacoesCondominio({ navigation }: any) {
 }
 
 function makeStyles(colors:ThemeColors){return StyleSheet.create({
-  safe:{flex:1,backgroundColor:colors.background},header:{paddingHorizontal:20,paddingTop:8,flexDirection:'row',alignItems:'flex-start',gap:12},back:{width:42,height:42,borderRadius:21,backgroundColor:colors.surface,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:colors.border},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.7,color:colors.porter},title:{fontSize:30,fontWeight:'700',color:colors.text},subtitle:{fontSize:13,color:colors.muted,marginTop:2},list:{padding:20,paddingBottom:40},card:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,padding:17,marginBottom:11},name:{fontSize:21,fontWeight:'700'},meta:{fontSize:15,color:colors.muted,marginTop:2},actions:{flexDirection:'row',gap:9,marginTop:15},reject:{flex:1,height:44,borderRadius:radius.pill,borderWidth:1,borderColor:colors.border,alignItems:'center',justifyContent:'center'},rejectText:{fontWeight:'700',color:colors.text},approve:{flex:1,height:44,borderRadius:radius.pill,backgroundColor:colors.porter,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:6},approveText:{fontWeight:'700',color:'#fff'},disabled:{opacity:.55}
+  safe:{flex:1,backgroundColor:colors.background},header:{paddingHorizontal:20,paddingTop:8,flexDirection:'row',alignItems:'flex-start',gap:12},back:{width:42,height:42,borderRadius:21,backgroundColor:colors.surface,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:colors.border},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.7,color:colors.porter},title:{fontSize:30,fontWeight:'700',color:colors.text},subtitle:{fontSize:13,color:colors.muted,marginTop:2},search:{minHeight:50,marginHorizontal:20,marginTop:14,borderRadius:radius.pill,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,flexDirection:'row',alignItems:'center',paddingHorizontal:14,gap:7},searchInput:{flex:1,borderWidth:0,backgroundColor:'transparent'},list:{padding:20,paddingBottom:40,flexGrow:1},card:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,padding:17,marginBottom:11},name:{fontSize:21,fontWeight:'700'},meta:{fontSize:15,color:colors.muted,marginTop:2},actions:{flexDirection:'row',gap:9,marginTop:15},reject:{flex:1,minHeight:44,borderRadius:radius.pill,borderWidth:1,borderColor:colors.border,alignItems:'center',justifyContent:'center'},rejectText:{fontWeight:'700',color:colors.text},approve:{flex:1,minHeight:44,borderRadius:radius.pill,backgroundColor:colors.porter,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:6},approveText:{fontWeight:'700',color:'#fff'},disabled:{opacity:.55}
 });}
