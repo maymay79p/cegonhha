@@ -14,7 +14,7 @@ type Filtro='todas'|'nao_lidas'|'encomendas'|'condominio'|'comunidade';
 function categoria(tipo:string){
   if(['chegada','retirada','retirada_solicitada','contestacao_encomenda','lembrete','previsao'].includes(tipo))return 'encomendas';
   if(['vinculo','solicitacao_vinculo'].includes(tipo))return 'condominio';
-  if(['denuncia','mural'].includes(tipo))return 'comunidade';
+  if(['denuncia','mural','resposta_mural'].includes(tipo))return 'comunidade';
   return 'condominio';
 }
 
@@ -35,7 +35,8 @@ export default function Notificacoes({navigation}:any){
       ? query(collection(db,'notificacoes'),where('condominioId','==',perfil.condominioId),where('destinatarioTipo','==','porteiro'))
       : query(collection(db,'notificacoes'),where('moradorId','==',user.uid));
     const unsubscribe=onSnapshot(q,snap=>{
-      const dados=snap.docs.map(x=>({id:x.id,...x.data()})) as any[];
+      const dados=(snap.docs.map(x=>({id:x.id,...x.data()})) as any[])
+        .filter(item=>!item.destinatarioId||item.destinatarioId===user.uid);
       dados.sort((a,b)=>(b.criadaEm?.seconds||0)-(a.criadaEm?.seconds||0));
       setItens(dados);
       setLoading(false);
@@ -73,7 +74,7 @@ export default function Notificacoes({navigation}:any){
       if(item.tipo==='denuncia'){navigation.navigate('Denuncias');return;}
       if(item.tipo==='previsao'&&!ehPortaria){navigation.navigate('Previsoes');return;}
       if(item.tipo==='previsao'&&ehPortaria){navigation.navigate('Home',{screen:'Painel'});return;}
-      if(item.tipo==='mural'){navigation.navigate('Mural');return;}
+      if(item.tipo==='mural'||item.tipo==='resposta_mural'){navigation.navigate('Mural');return;}
     }catch(e:any){
       const codigo=String(e?.code||'');
       Alert.alert('Notificações',codigo.includes('permission-denied')?'O Firestore bloqueou esta ação. Publique as regras mais recentes do Cegonha.':e?.message||'Não foi possível abrir este aviso.');
@@ -108,6 +109,7 @@ export default function Notificacoes({navigation}:any){
     if(tipo==='vinculo'||tipo==='solicitacao_vinculo')return'people-outline';
     if(tipo==='previsao')return'time-outline';
     if(tipo==='denuncia')return'flag-outline';
+    if(tipo==='resposta_mural')return'chatbubble-ellipses-outline';
     return'notifications-outline';
   }
 
@@ -116,23 +118,24 @@ export default function Notificacoes({navigation}:any){
     if(item.tipo==='solicitacao_vinculo')return 'Toque para revisar a solicitação';
     if(item.tipo==='vinculo')return 'Toque para abrir o Perfil';
     if(item.tipo==='denuncia')return 'Toque para abrir as denúncias';
+    if(item.tipo==='resposta_mural')return 'Toque para abrir a resposta no mural';
     return '';
   }
 
   const vazio=ehPortaria
-    ? 'Solicitações de retirada, contestações, vínculos, entregas previstas e denúncias aparecerão aqui.'
-    : 'Chegadas, retiradas, lembretes e decisões da portaria aparecerão aqui automaticamente.';
+    ? 'Solicitações de retirada, contestações, vínculos, respostas do mural, entregas previstas e denúncias aparecerão aqui.'
+    : 'Chegadas, retiradas, lembretes, respostas do mural e decisões da portaria aparecerão aqui automaticamente.';
   const destaque=ehPortaria?colors.porter:colors.accent;
   const filtros:[Filtro,string][]=[['todas','Todas'],['nao_lidas',`Não lidas · ${naoLidas}`],['encomendas','Encomendas'],['condominio','Condomínio'],['comunidade','Comunidade']];
 
   return <View style={styles.container}>
-    <View style={styles.top}><View style={{flex:1}}><Text style={styles.eyebrow}>CENTRAL</Text><Text style={styles.title}>Notificações</Text><Text style={styles.subtitle}>{ehPortaria?'Avisos do condomínio para a portaria':'Atualizações da portaria para você'}</Text></View>{naoLidas>0&&<TouchableOpacity onPress={marcarTodas}><Text style={styles.markAll}>Marcar todas</Text></TouchableOpacity>}</View>
+    <View style={styles.top}><View style={{flex:1}}><Text style={styles.eyebrow}>CENTRAL</Text><Text style={styles.title}>Notificações</Text><Text style={styles.subtitle}>{ehPortaria?'Avisos do condomínio para a portaria':'Atualizações da portaria e da comunidade para você'}</Text></View>{naoLidas>0&&<TouchableOpacity onPress={marcarTodas}><Text style={styles.markAll}>Marcar todas</Text></TouchableOpacity>}</View>
     <View style={styles.tabsShell}><FlatList horizontal showsHorizontalScrollIndicator={false} data={filtros} keyExtractor={i=>i[0]} contentContainerStyle={styles.filters} renderItem={({item})=>{const ativo=filtro===item[0];return <TouchableOpacity style={[styles.filter,ativo&&styles.filterActive]} onPress={()=>setFiltro(item[0])} accessibilityRole="tab" accessibilityState={{selected:ativo}}><Text style={[styles.filterText,ativo&&styles.filterTextActive]}>{item[1]}</Text></TouchableOpacity>;}}/></View>
     {loading?<LoadingCards/>:<FlatList data={exibidos} keyExtractor={item=>item.id} contentContainerStyle={styles.list} showsVerticalScrollIndicator={false} ListEmptyComponent={<EmptyState icon="notifications-off-outline" title="Sem avisos" text={vazio}/>} renderItem={({item})=>{
       const lida=estaLida(item);const hint=dica(item);
       return <TouchableOpacity style={[styles.card,!lida&&styles.unread]} onPress={()=>abrirAviso(item)}>
         <View style={[styles.icon,!lida&&styles.iconUnread]}><Ionicons name={icon(item.tipo) as any} size={21} color={!lida?destaque:colors.muted}/></View>
-        <View style={{flex:1}}><View style={styles.cardTop}><Text style={styles.category}>{categoria(String(item.tipo||''))==='encomendas'?'ENCOMENDAS':categoria(String(item.tipo||''))==='comunidade'?'COMUNIDADE':'CONDOMÍNIO'}</Text>{!lida&&<Text style={styles.newTag}>NOVO</Text>}</View><Text style={styles.message}>{item.mensagem}</Text>{!!item.remetenteNome&&ehPortaria&&<Text style={styles.sender}>Enviado por {item.remetenteNome}</Text>}<Text style={styles.date}>{item.criadaEm?.toDate?.().toLocaleString('pt-BR')||''}</Text>{!!hint&&<Text style={styles.hint}>{hint}</Text>}</View>
+        <View style={{flex:1}}><View style={styles.cardTop}><Text style={styles.category}>{categoria(String(item.tipo||''))==='encomendas'?'ENCOMENDAS':categoria(String(item.tipo||''))==='comunidade'?'COMUNIDADE':'CONDOMÍNIO'}</Text>{!lida&&<Text style={styles.newTag}>NOVO</Text>}</View><Text style={styles.message}>{item.mensagem}</Text>{!!item.remetenteNome&&<Text style={styles.sender}>Enviado por {item.remetenteNome}</Text>}<Text style={styles.date}>{item.criadaEm?.toDate?.().toLocaleString('pt-BR')||''}</Text>{!!hint&&<Text style={styles.hint}>{hint}</Text>}</View>
       </TouchableOpacity>;
     }}/>} 
   </View>;
