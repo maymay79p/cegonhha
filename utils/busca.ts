@@ -42,6 +42,16 @@ export function montarTextoBuscaEncomenda(item: any) {
 export function correspondeBusca(textoIndexado: string, termo: unknown) {
   const consulta = normalizarBusca(termo);
   if (!consulta) return true;
+  const indexado = normalizarBusca(textoIndexado);
+  if (indexado.includes(consulta)) return true;
+
+  const palavras = new Set(indexado.split(' ').filter(Boolean));
   const tokens = consulta.split(' ').filter(Boolean);
-  return tokens.every(token => textoIndexado.includes(token));
+  return tokens.every(token => {
+    // Abreviações e valores curtos (A, B, AP, BL) precisam coincidir com uma
+    // palavra inteira. Assim, buscar "bloco A" não encontra por engano um
+    // morador do bloco B só porque o nome contém a letra "a".
+    if (token.length <= 2) return palavras.has(token);
+    return indexado.includes(token);
+  });
 }
