@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { signOut } from 'firebase/auth';
-import { collection, deleteDoc, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import { useFeedback } from '../context/FeedbackContext';
 import { useTheme } from '../context/ThemeContext';
 import { solicitarVinculoPorCodigo, concluirVinculoAprovado } from '../services/vinculo';
+import { atualizarPerfilComIdentificadores } from '../services/identificadoresUsuarios';
 import { desregistrarDispositivoPush } from '../services/pushNotifications';
 import { AppText as Text, AppTextInput as TextInput } from '../components/AppText';
 import { KeyboardScreen } from '../components/KeyboardScreen';
@@ -76,13 +77,22 @@ export default function Perfil({ navigation }: any) {
     if (perfil.tipo === 'morador' && (!bloco.trim() || !apartamento.trim())) return setErroDados('Informe bloco e apartamento.');
     try {
       setSalvando(true);
-      await updateDoc(doc(db, 'usuarios', user.uid), {
-        nome: nome.trim(),
-        cpf: somenteDigitos(cpf),
-        telefone: formatarTelefoneBR(telefone),
-        bloco: perfil.tipo === 'morador' ? bloco.trim().toUpperCase() : '',
-        apartamento: perfil.tipo === 'morador' ? apartamento.trim() : '',
-        atualizadoEm: serverTimestamp(),
+      const cpfNovo = somenteDigitos(cpf);
+      const telefoneNovo = formatarTelefoneBR(telefone);
+      await atualizarPerfilComIdentificadores({
+        uid:user.uid,
+        cpfAnterior:perfil.cpf || '',
+        telefoneAnterior:perfil.telefone || '',
+        cpfNovo,
+        telefoneNovo,
+        dadosUsuario:{
+          nome:nome.trim(),
+          cpf:cpfNovo,
+          telefone:telefoneNovo,
+          bloco:perfil.tipo === 'morador' ? bloco.trim().toUpperCase() : '',
+          apartamento:perfil.tipo === 'morador' ? apartamento.trim() : '',
+          atualizadoEm:serverTimestamp(),
+        },
       });
       await recarregarPerfil();
       feedback.notify('Alterações sincronizadas com o aplicativo.', { title:'Perfil atualizado', tone:'success' });
@@ -177,9 +187,9 @@ export default function Perfil({ navigation }: any) {
       <Text style={styles.cardLabel}>DADOS PESSOAIS</Text>
       <TextInput style={styles.input} placeholder="Nome completo" value={nome} onChangeText={v=>{setNome(v);setErroDados('');}}/>
       <TextInput style={styles.input} placeholder="CPF · 000.000.000-00" keyboardType="numeric" value={cpf} onChangeText={valor=>{setCpf(formatarCPF(valor));setErroDados('');}} maxLength={14}/>
-      <Text style={styles.fieldHint}>O CPF precisa ser válido e conter 11 dígitos.</Text>
+      <Text style={styles.fieldHint}>O CPF precisa ser válido, ter 11 dígitos e não pode pertencer a outra conta.</Text>
       <TextInput style={styles.input} placeholder="Telefone · (00) 00000-0000" keyboardType="phone-pad" value={telefone} onChangeText={valor=>{setTelefone(formatarTelefoneBR(valor));setErroDados('');}} maxLength={15}/>
-      <Text style={styles.fieldHint}>Use DDD + número de telefone brasileiro.</Text>
+      <Text style={styles.fieldHint}>Use DDD + número brasileiro. O telefone também deve ser exclusivo por conta.</Text>
       <View style={styles.readonly}><Text style={styles.readonlyLabel}>E-mail de acesso</Text><Text style={styles.readonlyValue}>{perfil.email}</Text></View>
       {isMorador && <View style={styles.twoCols}><TextInput style={[styles.input,styles.half]} placeholder="Bloco" autoCapitalize="characters" value={bloco} onChangeText={v=>{setBloco(v);setErroDados('');}}/><TextInput style={[styles.input,styles.half]} placeholder="Apartamento" value={apartamento} onChangeText={v=>{setApartamento(v);setErroDados('');}}/></View>}
       {!!erroDados && <View style={styles.inlineError}><Ionicons name="alert-circle-outline" size={18} color={colors.danger}/><Text style={styles.inlineErrorText}>{erroDados}</Text></View>}
