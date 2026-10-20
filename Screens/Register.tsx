@@ -3,9 +3,10 @@ import { AppState, StyleSheet, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { createUserWithEmailAndPassword, deleteUser, reload, sendEmailVerification, signOut, User } from 'firebase/auth';
-import { doc, getDoc, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { buscarCondominioPorCodigo, Condominio, prepararNovoCondominio } from '../services/condominios';
+import { salvarCadastroComIdentificadores } from '../services/identificadoresUsuarios';
 import { solicitarVinculoPorCodigo } from '../services/vinculo';
 import { PerfilUsuario, useAuth } from '../context/AuthContext';
 import { useFeedback } from '../context/FeedbackContext';
@@ -224,23 +225,26 @@ export default function Register({ route, navigation }: any) {
 
     const perfilCriado = montarPerfil(user, pendente);
     const { id, ...dadosFirestore } = perfilCriado;
-    const verificacao = { emailVerificado:true, emailVerificadoEm:serverTimestamp(), criadoEm:serverTimestamp() };
+    const dadosUsuario = {
+      ...dadosFirestore,
+      emailVerificado:true,
+      emailVerificadoEm:serverTimestamp(),
+      criadoEm:serverTimestamp(),
+    };
 
-    if (pendente.tipo === 'porteiro' && pendente.modoPorteiro === 'criar' && pendente.condominioPorteiro) {
-      const condominio = pendente.condominioPorteiro;
-      const batch = writeBatch(db);
-      batch.set(doc(db, 'condominios', condominio.id), {
-        nome: condominio.nome,
-        codigo: condominio.id,
-        codigoExibicao: condominio.codigoExibicao,
-        criadoPor: user.uid,
-        criadoEm: serverTimestamp(),
-      });
-      batch.set(doc(db, 'usuarios', user.uid), { ...dadosFirestore, ...verificacao });
-      await batch.commit();
-    } else {
-      await setDoc(doc(db, 'usuarios', user.uid), { ...dadosFirestore, ...verificacao });
-    }
+    await salvarCadastroComIdentificadores({
+      uid:user.uid,
+      cpf:pendente.cpf,
+      telefone:pendente.telefone,
+      dadosUsuario,
+      condominio: pendente.tipo === 'porteiro' && pendente.modoPorteiro === 'criar' && pendente.condominioPorteiro
+        ? {
+            id:pendente.condominioPorteiro.id,
+            nome:pendente.condominioPorteiro.nome,
+            codigoExibicao:pendente.condominioPorteiro.codigoExibicao,
+          }
+        : null,
+    });
 
     let solicitacaoErro = '';
     try { await criarSolicitacaoMorador(perfilCriado, pendente); }
@@ -406,7 +410,7 @@ export default function Register({ route, navigation }: any) {
     <View style={styles.formCard}>
       <TextInput style={styles.input} placeholder="Nome completo" value={nome} onChangeText={v=>{setNome(v);setErroFormulario('');}}/>
       <TextInput style={styles.input} placeholder="CPF · 000.000.000-00" keyboardType="numeric" value={cpf} onChangeText={valor=>{setCpf(formatarCPF(valor));setErroFormulario('');}} maxLength={14}/>
-      <Text style={styles.fieldHint}>CPF obrigatório e validado pelos dígitos verificadores.</Text>
+      <Text style={styles.fieldHint}>CPF obrigatório, validado e exclusivo por conta.</Text>
       {(tipo==='morador'||precisaCodigoPorteiro)&&<>
         <TextInput style={styles.input} placeholder={tipo==='morador'?'Código do condomínio (opcional)':'Código do condomínio'} autoCapitalize="characters" autoCorrect={false} value={codigoCondominio} onChangeText={valor=>{setCodigoCondominio(valor.toUpperCase());setCondominioConfirmado(null);setErroFormulario('');}}/>
         {tipo==='morador'&&!codigoCondominio.trim()&&<Text style={styles.optionalInfo}>Você pode criar a conta sem código e fazer o vínculo depois.</Text>}
@@ -415,7 +419,7 @@ export default function Register({ route, navigation }: any) {
       </>}
       {tipo==='morador'&&<View style={styles.twoCols}><TextInput style={[styles.input,styles.half]} placeholder="Bloco" autoCapitalize="characters" value={bloco} onChangeText={v=>{setBloco(v);setErroFormulario('');}}/><TextInput style={[styles.input,styles.half]} placeholder="Apartamento" value={apartamento} onChangeText={v=>{setApartamento(v);setErroFormulario('');}}/></View>}
       <TextInput style={styles.input} placeholder="Telefone · (00) 00000-0000" keyboardType="phone-pad" value={telefone} onChangeText={valor=>{setTelefone(formatarTelefoneBR(valor));setErroFormulario('');}} maxLength={15}/>
-      <Text style={styles.fieldHint}>Telefone obrigatório com DDD. São aceitos números fixos ou celulares brasileiros.</Text>
+      <Text style={styles.fieldHint}>Telefone obrigatório com DDD e exclusivo por conta. São aceitos números fixos ou celulares brasileiros.</Text>
       <TextInput style={[styles.input,cadastroAutenticado&&styles.readonly]} placeholder="E-mail" autoCapitalize="none" autoCorrect={false} keyboardType="email-address" value={email} onChangeText={v=>{setEmail(v);setErroFormulario('');}} editable={!cadastroAutenticado}/>
       {!cadastroAutenticado&&<TextInput style={styles.input} placeholder="Senha" secureTextEntry value={senha} onChangeText={v=>{setSenha(v);setErroFormulario('');}} onSubmitEditing={cadastrar}/>} 
       {!!erroFormulario && <View style={styles.inlineError}><Ionicons name="alert-circle-outline" size={18} color={colors.danger}/><Text style={[styles.inlineErrorText,{color:colors.danger}]}>{erroFormulario}</Text></View>}
