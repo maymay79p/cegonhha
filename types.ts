@@ -122,6 +122,7 @@ export type RootStackParamList = {
   PessoasCondominio: undefined;
   PessoaDetalhes: { pessoa: any };
   Privacidade: undefined;
+  Acessibilidade: undefined;
   Ajuda: undefined;
   Mural: undefined;
   Condominio: undefined;
