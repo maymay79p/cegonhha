@@ -77,7 +77,10 @@ export function useTabBadges() {
       : query(collection(db, 'notificacoes'), where('moradorId', '==', user.uid));
 
     return onSnapshot(q, snap => {
-      setNotificacoes(snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })));
+      const itens = snap.docs
+        .map(docSnap => ({ id: docSnap.id, ...docSnap.data() }) as any)
+        .filter(item => !item.destinatarioId || item.destinatarioId === user.uid);
+      setNotificacoes(itens);
     }, () => setNotificacoes([]));
   }, [user?.uid, perfil?.tipo, perfil?.condominioId]);
 
