@@ -36,6 +36,8 @@ assert.equal(correspondeBusca(pessoaIndex, 'apto 203'), true, 'deve encontrar ab
 assert.equal(correspondeBusca(pessoaIndex, 'ap 203'), true, 'deve encontrar abreviação ap');
 assert.equal(correspondeBusca(pessoaIndex, 'joao bloco b 203'), true, 'deve combinar múltiplos termos');
 assert.equal(correspondeBusca(pessoaIndex, 'bloco z'), false, 'não deve retornar bloco diferente');
+assert.equal(correspondeBusca(pessoaIndex, 'bloco a'), false, 'letra presente no nome não pode causar falso positivo no bloco');
+assert.equal(correspondeBusca(pessoaIndex, 'ap 20'), false, 'valor curto precisa coincidir como palavra inteira');
 
 const encomenda = {
   moradorNome: 'Maria Souza',
@@ -52,7 +54,8 @@ assert.equal(correspondeBusca(encomendaIndex, 'apto 101 caixa'), true);
 assert.equal(correspondeBusca(encomendaIndex, 'ab12cd34'), true);
 assert.equal(correspondeBusca(encomendaIndex, 'maria ap 101'), true);
 assert.equal(correspondeBusca(encomendaIndex, 'ap 999'), false);
+assert.equal(correspondeBusca(encomendaIndex, 'bloco b'), false, 'não deve confundir bloco com letras do nome ou descrição');
 
 assert.equal(normalizarBusca('  APÊ 203 / Bloco B  '), 'ape 203 bloco b');
 
-console.log('Busca validada: nome, CPF/e-mail, bloco e apartamento com rótulos e abreviações.');
+console.log('Busca validada: nome, CPF/e-mail, bloco e apartamento com rótulos, abreviações e sem falsos positivos curtos.');
