@@ -43,11 +43,16 @@ export function correspondeBusca(textoIndexado: string, termo: unknown) {
   const consulta = normalizarBusca(termo);
   if (!consulta) return true;
   const indexado = normalizarBusca(textoIndexado);
-  if (indexado.includes(consulta)) return true;
-
   const palavras = new Set(indexado.split(' ').filter(Boolean));
   const tokens = consulta.split(' ').filter(Boolean);
-  if (tokens.length === 1) return indexado.includes(tokens[0]);
+
+  if (tokens.length === 1) {
+    const token = tokens[0];
+    // Números isolados são exatos: pesquisar 203 não deve retornar 1203.
+    if (/^\d+$/.test(token)) return palavras.has(token);
+    // Para nomes e códigos simples, ainda aceitamos prefixos/trechos.
+    return indexado.includes(token);
+  }
 
   return tokens.every(token => {
     // Abreviações, letras isoladas e números precisam coincidir com uma palavra
