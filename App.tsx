@@ -210,9 +210,11 @@ function RootNavigator() {
       <Stack.Screen name="Login" component={Login} />
       <Stack.Screen name="Register" component={Register} />
       <Stack.Screen name="RecuperaSenha" component={RecuperaSenha} />
+      <Stack.Screen name="Acessibilidade" component={Acessibilidade} />
     </Stack.Navigator> : !perfil ? <Stack.Navigator id="ProfileCompletionStack" screenOptions={noHeader}>
       <Stack.Screen name="Register" component={Register} />
       <Stack.Screen name="Privacidade" component={Privacidade} />
+      <Stack.Screen name="Acessibilidade" component={Acessibilidade} />
     </Stack.Navigator> : <Stack.Navigator id="AuthenticatedStack" screenOptions={noHeader}>
       <Stack.Screen name="Home" component={AreaAutenticada} />
       {perfil.tipo === 'porteiro' && <Stack.Screen name="OCR" component={OCR} options={stackSafe22} />}
