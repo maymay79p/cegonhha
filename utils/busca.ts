@@ -47,11 +47,13 @@ export function correspondeBusca(textoIndexado: string, termo: unknown) {
 
   const palavras = new Set(indexado.split(' ').filter(Boolean));
   const tokens = consulta.split(' ').filter(Boolean);
+  if (tokens.length === 1) return indexado.includes(tokens[0]);
+
   return tokens.every(token => {
-    // Abreviações e valores curtos (A, B, AP, BL) precisam coincidir com uma
-    // palavra inteira. Assim, buscar "bloco A" não encontra por engano um
-    // morador do bloco B só porque o nome contém a letra "a".
-    if (token.length <= 2) return palavras.has(token);
+    // Abreviações, letras isoladas e números precisam coincidir com uma palavra
+    // inteira. Assim, "bloco A" não casa com uma letra dentro do nome e
+    // "ap 203" não encontra por engano o apartamento 1203.
+    if (token.length <= 2 || /^\d+$/.test(token)) return palavras.has(token);
     return indexado.includes(token);
   });
 }
