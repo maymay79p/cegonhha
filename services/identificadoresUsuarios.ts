@@ -167,3 +167,26 @@ export async function atualizarPerfilComIdentificadores(params: {
     erroUnicidade(e);
   }
 }
+
+export async function sincronizarIdentificadoresExistentes(params: {
+  uid: string;
+  cpf?: string;
+  telefone?: string;
+  email?: string;
+}) {
+  const cpf = normalizarCPF(params.cpf);
+  const telefone = normalizarTelefone(params.telefone);
+  const email = normalizarEmail(params.email);
+  if (cpf.length !== 11 || telefone.length < 10 || !email.includes('@')) return;
+
+  const [{ cpfRef, telefoneRef, cpfId, telefoneId }, emailIdentificador] = await Promise.all([
+    refsPessoais(cpf, telefone),
+    refIdentificador('email', email),
+  ]);
+
+  await runTransaction(db, async transaction => {
+    transaction.set(cpfRef, { uid:params.uid, tipo:'cpf', chave:cpfId, atualizadoEm:serverTimestamp() });
+    transaction.set(telefoneRef, { uid:params.uid, tipo:'telefone', chave:telefoneId, atualizadoEm:serverTimestamp() });
+    transaction.set(emailIdentificador.ref, { uid:params.uid, tipo:'email', chave:emailIdentificador.id, atualizadoEm:serverTimestamp() });
+  });
+}
