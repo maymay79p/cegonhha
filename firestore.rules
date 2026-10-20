@@ -149,7 +149,7 @@ service cloud.firestore {
       allow get, list: if false;
       allow create: if logado()
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.tipo in ['cpf', 'telefone']
+        && request.resource.data.tipo in ['cpf', 'telefone', 'email']
         && request.resource.data.chave == id;
       allow update: if logado()
         && resource.data.uid == request.auth.uid
