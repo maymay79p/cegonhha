@@ -30,6 +30,7 @@ import SolicitacoesCondominio from './Screens/SolicitacoesCondominio';
 import PessoasCondominio from './Screens/PessoasCondominio';
 import PessoaDetalhes from './Screens/PessoaDetalhes';
 import Privacidade from './Screens/Privacidade';
+import Acessibilidade from './Screens/Acessibilidade';
 import Ajuda from './Screens/Ajuda';
 import Onboarding from './Screens/Onboarding';
 import Mural from './Screens/Mural';
@@ -37,6 +38,8 @@ import Condominio from './Screens/Condominio';
 import CodigoCondominio from './Screens/CodigoCondominio';
 import { RootStackParamList } from './types';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { AccessibilityProvider } from './context/AccessibilityContext';
+import { FeedbackProvider } from './context/FeedbackContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { useTabBadges } from './hooks/useTabBadges';
 import { AppText } from './components/AppText';
@@ -226,6 +229,7 @@ function RootNavigator() {
       <Stack.Screen name="PessoasCondominio" component={PessoasCondominio} />
       {perfil.tipo === 'porteiro' && <Stack.Screen name="PessoaDetalhes" component={PessoaDetalhes} />}
       <Stack.Screen name="Privacidade" component={Privacidade} />
+      <Stack.Screen name="Acessibilidade" component={Acessibilidade} />
       <Stack.Screen name="Ajuda" component={Ajuda} />
       <Stack.Screen name="Mural" component={Mural} options={stackSafe20} />
       <Stack.Screen name="Condominio" component={Condominio} />
@@ -246,7 +250,15 @@ function AppWithFonts() {
 }
 
 export default function App() {
-  return <SafeAreaProvider><ThemeProvider><AppWithFonts /></ThemeProvider></SafeAreaProvider>;
+  return <SafeAreaProvider>
+    <AccessibilityProvider>
+      <ThemeProvider>
+        <FeedbackProvider>
+          <AppWithFonts />
+        </FeedbackProvider>
+      </ThemeProvider>
+    </AccessibilityProvider>
+  </SafeAreaProvider>;
 }
 
 const styles = StyleSheet.create({
