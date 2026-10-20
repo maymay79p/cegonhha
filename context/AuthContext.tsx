@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
+import { sincronizarIdentificadoresExistentes } from '../services/identificadoresUsuarios';
 import { registrarDispositivoPush } from '../services/pushNotifications';
 
 export type PerfilUsuario = {
@@ -100,10 +101,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Contas criadas por e-mail/senha não entram no aplicativo antes da
-      // confirmação do endereço. O usuário autenticado continua disponível para
-      // a tela de cadastro verificar/re-enviar o e-mail, mas nenhum perfil é
-      // carregado e nenhum dado da área autenticada é liberado.
       if (precisaConfirmarEmail(currentUser)) {
         perfilRef.current = null;
         setPerfil(null);
@@ -156,6 +153,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (timerPerfilAusente) clearTimeout(timerPerfilAusente);
     };
   }, []);
+
+  useEffect(() => {
+    if (!user || !perfil || user.uid !== perfil.id || precisaConfirmarEmail(user)) return;
+    sincronizarIdentificadoresExistentes({
+      uid:user.uid,
+      cpf:perfil.cpf,
+      telefone:perfil.telefone,
+      email:perfil.email,
+    }).catch(() => {});
+  }, [user?.uid, user?.emailVerified, perfil?.id, perfil?.cpf, perfil?.telefone, perfil?.email]);
 
   useEffect(() => {
     if (!user || !perfil || user.uid !== perfil.id || precisaConfirmarEmail(user)) return;
