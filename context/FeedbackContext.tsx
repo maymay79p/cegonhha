@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert as RNAlert, Modal, Pressable, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AppText as Text } from '../components/AppText';
 import { useTheme } from './ThemeContext';
@@ -53,6 +53,14 @@ function toneColor(colors: ThemeColors, tone: FeedbackTone) {
   return colors.info;
 }
 
+function inferTone(title = '', message = ''): FeedbackTone {
+  const texto = `${title} ${message}`.toLowerCase();
+  if (/erro|falha|não foi possível|nao foi possivel|bloquead|incorret|ofensiv|não permitido|nao permitido/.test(texto)) return 'danger';
+  if (/atenção|atencao|aviso|inválid|invalid|permissão|permissao|limite|banid|descartar|duplicidade|pendente/.test(texto)) return 'warning';
+  if (/sucesso|conclu|atualizad|enviad|copiad|registrad|aprovad|confirmad|salv/.test(texto)) return 'success';
+  return 'info';
+}
+
 export function FeedbackProvider({ children }: { children: React.ReactNode }) {
   const { colors } = useTheme();
   const { reduceMotion, enhancedVisualFeedback, announce, vibrate } = useAccessibility();
@@ -61,19 +69,19 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
   const [toast, setToast] = useState<ToastState>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function dismiss() {
+  const dismiss = useCallback(() => {
     setDialog(null);
-  }
+  }, []);
 
-  function alert(title: string, message = '', actions?: FeedbackAction[], tone: FeedbackTone = 'info') {
+  const alert = useCallback((title: string, message = '', actions?: FeedbackAction[], tone: FeedbackTone = 'info') => {
     const finais = actions?.length ? actions : [{ text: 'OK' }];
     setDialog({ title, message, tone, actions: finais });
     announce(`${title}. ${message}`.trim());
     if (tone === 'danger') vibrate('error');
     else if (tone === 'warning') vibrate('warning');
-  }
+  }, [announce, vibrate]);
 
-  function notify(message: string, options?: { title?: string; tone?: FeedbackTone; durationMs?: number }) {
+  const notify = useCallback((message: string, options?: { title?: string; tone?: FeedbackTone; durationMs?: number }) => {
     const tone = options?.tone || 'success';
     const id = Date.now();
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -85,14 +93,43 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
     const base = options?.durationMs ?? 2800;
     const duration = enhancedVisualFeedback ? Math.max(base, 4200) : base;
     toastTimer.current = setTimeout(() => setToast(atual => atual?.id === id ? null : atual), duration);
-  }
+  }, [announce, vibrate, enhancedVisualFeedback]);
+
+  // Mantém compatibilidade com telas mais antigas que ainda chamam Alert.alert.
+  // Confirmações e erros abrem o modal personalizado; mensagens simples e sem
+  // ação viram avisos discretos, reduzindo a quantidade de pop-ups bloqueantes.
+  useEffect(() => {
+    const objeto = RNAlert as any;
+    const original = objeto.alert;
+    try {
+      objeto.alert = (title?: string, message?: string, buttons?: FeedbackAction[]) => {
+        const titulo = title || 'Cegonha';
+        const texto = message || '';
+        const tone = inferTone(titulo, texto);
+        const acoes = Array.isArray(buttons) ? buttons : [];
+        const acaoUnicaPassiva = acoes.length === 0 || (acoes.length === 1 && !acoes[0]?.onPress && (!acoes[0]?.text || /^ok$/i.test(acoes[0].text)));
+        if (acaoUnicaPassiva && tone !== 'danger' && tone !== 'warning') {
+          notify(texto || titulo, { title: texto ? titulo : undefined, tone });
+          return;
+        }
+        alert(titulo, texto, acoes.length ? acoes : undefined, tone);
+      };
+    } catch {}
+    return () => {
+      try { objeto.alert = original; } catch {}
+    };
+  }, [alert, notify]);
+
+  useEffect(() => () => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+  }, []);
 
   async function executarAcao(action: FeedbackAction) {
     setDialog(null);
     await action.onPress?.();
   }
 
-  const value = useMemo(() => ({ alert, notify, dismiss }), [enhancedVisualFeedback, reduceMotion]);
+  const value = useMemo(() => ({ alert, notify, dismiss }), [alert, notify, dismiss]);
 
   return <FeedbackContext.Provider value={value}>
     {children}
