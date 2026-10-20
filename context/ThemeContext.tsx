@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColorScheme } from 'react-native';
 import { darkColors, lightColors, ThemeColors } from '../theme';
+import { useAccessibility } from './AccessibilityContext';
 
 type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -22,8 +23,43 @@ const ThemeContext = createContext<ThemeContextValue>({
   toggle: async () => {},
 });
 
+const highContrastLight: ThemeColors = {
+  background: '#FFFFFF',
+  surface: '#FFFFFF',
+  surfaceSoft: '#F2F2F2',
+  text: '#000000',
+  muted: '#3A3532',
+  border: '#6C625C',
+  accent: '#7C173C',
+  accentSoft: '#F7DCE6',
+  porter: '#241B20',
+  porterSoft: '#E8E0E4',
+  success: '#245D35',
+  warning: '#784000',
+  danger: '#8A1F1F',
+  info: '#234E70',
+};
+
+const highContrastDark: ThemeColors = {
+  background: '#000000',
+  surface: '#0A0A0A',
+  surfaceSoft: '#171717',
+  text: '#FFFFFF',
+  muted: '#D8D8D8',
+  border: '#8A8A8A',
+  accent: '#FF9BBD',
+  accentSoft: '#4A182B',
+  porter: '#E4B2C6',
+  porterSoft: '#3B2931',
+  success: '#9AD8B0',
+  warning: '#FFC27A',
+  danger: '#FF9898',
+  info: '#ADD7FA',
+};
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const system = useColorScheme();
+  const { highContrast } = useAccessibility();
   const [mode, setModeState] = useState<ThemeMode>('system');
 
   useEffect(() => {
@@ -33,7 +69,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const dark = mode === 'dark' || (mode === 'system' && system === 'dark');
-  const colors = dark ? darkColors : lightColors;
+  const colors = highContrast
+    ? (dark ? highContrastDark : highContrastLight)
+    : (dark ? darkColors : lightColors);
 
   async function setMode(next: ThemeMode) {
     setModeState(next);
