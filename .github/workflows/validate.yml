@@ -40,7 +40,7 @@ jobs:
         run: npm run test:busca
 
       - name: Validar vínculo e regras do Firestore
-        run: npx firebase-tools@latest emulators:exec --only auth,firestore --project demo-cegonha "node scripts/test-vinculo-emulator.mjs"
+        run: npx firebase-tools@latest emulators:exec --only auth,firestore --project demo-cegonha "node scripts/test-vinculo-emulator.mjs && node scripts/test-comunidade-seguranca-emulator.mjs"
 
       - name: Executar Expo Doctor
         run: npx expo-doctor@latest
