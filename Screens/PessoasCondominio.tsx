@@ -8,13 +8,10 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { AppText as Text, AppTextInput as TextInput } from '../components/AppText';
 import { EmptyState, LoadingCards } from '../components/States';
+import { correspondeBusca, montarTextoBuscaPessoa } from '../utils/busca';
 import { radius, ThemeColors } from '../theme';
 
 type Filtro = 'todos' | 'morador' | 'porteiro';
-
-function normalizar(valor: unknown) {
-  return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-}
 
 export default function PessoasCondominio({ navigation }: any) {
   const { user, perfil } = useAuth();
@@ -65,12 +62,9 @@ export default function PessoasCondominio({ navigation }: any) {
   const portaria = pessoas.filter(p => p.tipo === 'porteiro').length;
 
   const exibidas = useMemo(() => {
-    const termo = normalizar(busca);
     return pessoas.filter(item => {
       if (filtro !== 'todos' && item.tipo !== filtro) return false;
-      if (!termo) return true;
-      const texto = normalizar([item.nome,item.tipo === 'morador' ? 'morador' : 'portaria',item.bloco,item.apartamento].join(' '));
-      return texto.includes(termo);
+      return correspondeBusca(montarTextoBuscaPessoa(item), busca);
     });
   }, [pessoas, busca, filtro]);
 
@@ -93,23 +87,23 @@ export default function PessoasCondominio({ navigation }: any) {
         <View style={styles.stat}><Text style={[styles.statNumber,{color:corDestaque}]}>{pessoas.length}</Text><Text style={styles.statLabel}>Total</Text></View>
       </View>
 
-      <View style={styles.searchBox}><Ionicons name="search-outline" size={19} color={colors.muted}/><TextInput style={styles.searchInput} placeholder="Nome, bloco ou apartamento" value={busca} onChangeText={setBusca}/>{!!busca&&<TouchableOpacity onPress={()=>setBusca('')}><Ionicons name="close-circle" size={19} color={colors.muted}/></TouchableOpacity>}</View>
+      <View style={styles.searchBox}><Ionicons name="search-outline" size={19} color={colors.muted}/><TextInput style={styles.searchInput} placeholder="Nome, bloco ou apartamento" value={busca} onChangeText={setBusca}/>{!!busca&&<TouchableOpacity onPress={()=>setBusca('')} accessibilityLabel="Limpar busca"><Ionicons name="close-circle" size={19} color={colors.muted}/></TouchableOpacity>}</View>
 
-      <View style={styles.tabsShell}><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>{([['todos','Todos'],['morador','Moradores'],['porteiro','Portaria']] as const).map(([valor,label]) => {const ativo=filtro===valor;return <TouchableOpacity key={valor} style={[styles.filter,ativo&&styles.filterActive,{borderBottomColor:ativo?corDestaque:'transparent',backgroundColor:ativo?(ehPortaria?colors.porterSoft:colors.accentSoft):'transparent'}]} onPress={()=>setFiltro(valor)}><Text style={[styles.filterText,ativo&&{color:corDestaque,fontWeight:'700'}]}>{label}</Text></TouchableOpacity>;})}</ScrollView></View>
+      <View style={styles.tabsShell}><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>{([['todos','Todos'],['morador','Moradores'],['porteiro','Portaria']] as const).map(([valor,label]) => {const ativo=filtro===valor;return <TouchableOpacity key={valor} accessibilityRole="tab" accessibilityState={{selected:ativo}} style={[styles.filter,ativo&&styles.filterActive,{borderBottomColor:ativo?corDestaque:'transparent',backgroundColor:ativo?(ehPortaria?colors.porterSoft:colors.accentSoft):'transparent'}]} onPress={()=>setFiltro(valor)}><Text style={[styles.filterText,ativo&&{color:corDestaque,fontWeight:'700'}]}>{label}</Text></TouchableOpacity>;})}</ScrollView></View>
 
       {loading ? <LoadingCards count={4}/> : <FlatList
         data={exibidas}
         keyExtractor={item => item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.list}
-        ListEmptyComponent={<EmptyState icon="people-outline" title="Nenhuma pessoa encontrada" text="Ajuste a busca ou o filtro de perfil para tentar novamente."/>}
+        ListEmptyComponent={<EmptyState icon="people-outline" title="Nenhuma pessoa encontrada" text="Tente buscar por nome, bloco ou apartamento, ou altere a aba de perfil."/>}
         renderItem={({ item }) => {
           const morador = item.tipo === 'morador';
           const inicial = String(item.nome || (morador ? 'M' : 'P')).trim().charAt(0).toUpperCase();
           const souEu = item.id === user?.uid;
           const pendencias=pendenciasPorMorador[item.id]||0;
           const clicavel=ehPortaria&&!souEu;
-          return <TouchableOpacity style={styles.card} onPress={()=>clicavel&&navigation.navigate('PessoaDetalhes',{pessoa:item})} disabled={!clicavel}>
+          return <TouchableOpacity style={styles.card} onPress={()=>clicavel&&navigation.navigate('PessoaDetalhes',{pessoa:item})} disabled={!clicavel} accessibilityLabel={`${item.nome || (morador ? 'Morador' : 'Portaria')}${morador ? `, bloco ${item.bloco || 'não informado'}, apartamento ${item.apartamento || 'não informado'}` : ', portaria'}`}>
             <View style={[styles.avatar,{backgroundColor:morador?colors.accentSoft:colors.porterSoft}]}><Text style={[styles.avatarText,{color:morador?colors.accent:colors.porter}]}>{inicial}</Text></View>
             <View style={styles.personBody}>
               <View style={styles.nameRow}><Text style={styles.name}>{item.nome || (morador ? 'Morador' : 'Portaria')}</Text>{souEu&&<View style={styles.youBadge}><Text style={styles.youText}>Você</Text></View>}</View>
@@ -127,6 +121,6 @@ export default function PessoasCondominio({ navigation }: any) {
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    safe:{flex:1,backgroundColor:colors.background},container:{flex:1,paddingHorizontal:20,paddingTop:22,backgroundColor:colors.background},header:{flexDirection:'row',alignItems:'flex-start',gap:12,marginBottom:14},back:{width:42,height:42,borderRadius:21,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,alignItems:'center',justifyContent:'center'},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.7},title:{fontSize:34,fontWeight:'700',color:colors.text,marginTop:1},subtitle:{fontSize:14,color:colors.muted,marginTop:2,lineHeight:19},stats:{flexDirection:'row',gap:8,marginBottom:12},stat:{flex:1,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,paddingVertical:12,paddingHorizontal:8,alignItems:'center'},statNumber:{fontSize:25,fontWeight:'700'},statLabel:{fontSize:12,color:colors.muted,marginTop:1},searchBox:{height:50,backgroundColor:colors.surface,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,flexDirection:'row',alignItems:'center',gap:8,paddingHorizontal:13},searchInput:{flex:1,borderWidth:0,backgroundColor:'transparent',paddingHorizontal:0,paddingVertical:0},tabsShell:{marginTop:10,borderBottomWidth:1,borderBottomColor:colors.border},filters:{gap:3},filter:{minHeight:39,paddingHorizontal:12,paddingVertical:8,borderBottomWidth:3},filterText:{fontSize:13,color:colors.muted},filterActive:{},list:{paddingBottom:110,flexGrow:1,paddingTop:7},card:{minHeight:76,backgroundColor:colors.surface,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,padding:13,marginBottom:8,flexDirection:'row',alignItems:'center',gap:11},avatar:{width:46,height:46,borderRadius:23,alignItems:'center',justifyContent:'center'},avatarText:{fontSize:20,fontWeight:'700'},personBody:{flex:1},nameRow:{flexDirection:'row',alignItems:'center',gap:6,flexWrap:'wrap'},name:{fontSize:17,fontWeight:'700',color:colors.text},role:{fontSize:13,fontWeight:'600',color:colors.muted,marginTop:1},address:{fontSize:13,color:colors.muted,marginTop:2},pendingInfo:{fontSize:11,fontWeight:'700',color:colors.success,marginTop:3},youBadge:{paddingHorizontal:7,paddingVertical:2,borderRadius:radius.pill,backgroundColor:colors.surfaceSoft},youText:{fontSize:11,fontWeight:'700',color:colors.muted},activeBadge:{flexDirection:'row',alignItems:'center',gap:5},activeDot:{width:7,height:7,borderRadius:4,backgroundColor:colors.success},activeText:{fontSize:11,fontWeight:'700',color:colors.success},
+    safe:{flex:1,backgroundColor:colors.background},container:{flex:1,paddingHorizontal:20,paddingTop:22,backgroundColor:colors.background},header:{flexDirection:'row',alignItems:'flex-start',gap:12,marginBottom:14},back:{width:42,height:42,borderRadius:21,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,alignItems:'center',justifyContent:'center'},eyebrow:{fontSize:12,fontWeight:'700',letterSpacing:1.7},title:{fontSize:34,fontWeight:'700',color:colors.text,marginTop:1},subtitle:{fontSize:14,color:colors.muted,marginTop:2,lineHeight:19},stats:{flexDirection:'row',gap:8,marginBottom:12},stat:{flex:1,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.medium,paddingVertical:12,paddingHorizontal:8,alignItems:'center'},statNumber:{fontSize:25,fontWeight:'700'},statLabel:{fontSize:12,color:colors.muted,marginTop:1},searchBox:{minHeight:50,backgroundColor:colors.surface,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,flexDirection:'row',alignItems:'center',gap:8,paddingHorizontal:13},searchInput:{flex:1,borderWidth:0,backgroundColor:'transparent',paddingHorizontal:0,paddingVertical:0},tabsShell:{marginTop:10,borderBottomWidth:1,borderBottomColor:colors.border},filters:{gap:3},filter:{minHeight:39,paddingHorizontal:12,paddingVertical:8,borderBottomWidth:3},filterText:{fontSize:13,color:colors.muted},filterActive:{},list:{paddingBottom:110,flexGrow:1,paddingTop:7},card:{minHeight:76,backgroundColor:colors.surface,borderRadius:radius.medium,borderWidth:1,borderColor:colors.border,padding:13,marginBottom:8,flexDirection:'row',alignItems:'center',gap:11},avatar:{width:46,height:46,borderRadius:23,alignItems:'center',justifyContent:'center'},avatarText:{fontSize:20,fontWeight:'700'},personBody:{flex:1},nameRow:{flexDirection:'row',alignItems:'center',gap:6,flexWrap:'wrap'},name:{fontSize:17,fontWeight:'700',color:colors.text},role:{fontSize:13,fontWeight:'600',color:colors.muted,marginTop:1},address:{fontSize:13,color:colors.muted,marginTop:2},pendingInfo:{fontSize:11,fontWeight:'700',color:colors.success,marginTop:3},youBadge:{paddingHorizontal:7,paddingVertical:2,borderRadius:radius.pill,backgroundColor:colors.surfaceSoft},youText:{fontSize:11,fontWeight:'700',color:colors.muted},activeBadge:{flexDirection:'row',alignItems:'center',gap:5},activeDot:{width:7,height:7,borderRadius:4,backgroundColor:colors.success},activeText:{fontSize:11,fontWeight:'700',color:colors.success},
   });
 }
