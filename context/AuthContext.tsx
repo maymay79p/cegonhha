@@ -44,6 +44,11 @@ export async function lerPerfilDoCache(uid: string): Promise<PerfilUsuario | nul
   } catch { return null; }
 }
 
+function precisaConfirmarEmail(user: User) {
+  const usaSenha = user.providerData.some(provider => provider.providerId === 'password');
+  return usaSenha && !user.emailVerified;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [perfil, setPerfil] = useState<PerfilUsuario | null>(null);
@@ -59,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function recarregarPerfil() {
     const atual = auth.currentUser;
-    if (!atual) return;
+    if (!atual || precisaConfirmarEmail(atual)) return;
     const snapshot = await getDoc(doc(db, 'usuarios', atual.uid));
     if (!snapshot.exists()) return;
     const dados = { id: snapshot.id, ...snapshot.data() } as PerfilUsuario;
@@ -92,6 +97,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         perfilRef.current = null;
         setPerfil(null);
         setLoading(false);
+        return;
+      }
+
+      // Contas criadas por e-mail/senha não entram no aplicativo antes da
+      // confirmação do endereço. O usuário autenticado continua disponível para
+      // a tela de cadastro verificar/re-enviar o e-mail, mas nenhum perfil é
+      // carregado e nenhum dado da área autenticada é liberado.
+      if (precisaConfirmarEmail(currentUser)) {
+        perfilRef.current = null;
+        setPerfil(null);
+        setLoading(false);
+        AsyncStorage.removeItem(chaveCachePerfil(currentUser.uid)).catch(() => {});
         return;
       }
 
@@ -141,13 +158,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!user || !perfil || user.uid !== perfil.id) return;
+    if (!user || !perfil || user.uid !== perfil.id || precisaConfirmarEmail(user)) return;
     registrarDispositivoPush({
       uid: user.uid,
       tipo: perfil.tipo,
       condominioId: perfil.condominioId || '',
     }).catch(() => {});
-  }, [user?.uid, perfil?.id, perfil?.tipo, perfil?.condominioId]);
+  }, [user?.uid, user?.emailVerified, perfil?.id, perfil?.tipo, perfil?.condominioId]);
 
   return <AuthContext.Provider value={{ user, perfil, loading, recarregarPerfil, aplicarPerfilLocal }}>{children}</AuthContext.Provider>;
 }
