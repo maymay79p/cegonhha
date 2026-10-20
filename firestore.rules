@@ -13,10 +13,19 @@ service cloud.firestore {
         && perfil().get('condominioId', '') == id;
     }
 
-    function moradorExiste(uid) {
+    function usuarioExiste(uid) {
       return uid is string
         && uid.size() > 0
-        && exists(/databases/$(database)/documents/usuarios/$(uid))
+        && exists(/databases/$(database)/documents/usuarios/$(uid));
+    }
+
+    function usuarioNoCondominio(uid, condominioId) {
+      return usuarioExiste(uid)
+        && get(/databases/$(database)/documents/usuarios/$(uid)).data.get('condominioId', '') == condominioId;
+    }
+
+    function moradorExiste(uid) {
+      return usuarioExiste(uid)
         && get(/databases/$(database)/documents/usuarios/$(uid)).data.tipo == 'morador';
     }
 
@@ -96,6 +105,31 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/encomendas/$(request.resource.data.encomendaId)/interacoes/$(request.resource.data.referenciaId)).data.condominioId == request.resource.data.condominioId;
     }
 
+    function avisoRespostaMuralValido() {
+      return request.resource.data.tipo == 'resposta_mural'
+        && mesmoCondominio(request.resource.data.condominioId)
+        && request.resource.data.remetenteId == request.auth.uid
+        && request.resource.data.destinatarioId is string
+        && request.resource.data.destinatarioId.size() > 0
+        && request.resource.data.destinatarioId != request.auth.uid
+        && usuarioNoCondominio(request.resource.data.destinatarioId, request.resource.data.condominioId)
+        && request.resource.data.referenciaId is string
+        && request.resource.data.referenciaId.size() > 0
+        && existsAfter(/databases/$(database)/documents/mural/$(request.resource.data.referenciaId))
+        && getAfter(/databases/$(database)/documents/mural/$(request.resource.data.referenciaId)).data.autorId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/mural/$(request.resource.data.referenciaId)).data.condominioId == request.resource.data.condominioId
+        && getAfter(/databases/$(database)/documents/mural/$(request.resource.data.referenciaId)).data.respostaParaAutorId == request.resource.data.destinatarioId
+        && request.resource.data.destinatarioTipo == get(/databases/$(database)/documents/usuarios/$(request.resource.data.destinatarioId)).data.tipo
+        && (
+          (request.resource.data.destinatarioTipo == 'morador'
+            && request.resource.data.moradorId == request.resource.data.destinatarioId
+            && request.resource.data.lida == false) ||
+          (request.resource.data.destinatarioTipo == 'porteiro'
+            && request.resource.data.lidaPor is list
+            && request.resource.data.lidaPor.size() == 0)
+        );
+    }
+
     match /condominios/{condominioId} {
       allow get: if true;
       allow list: if false;
@@ -109,6 +143,21 @@ service cloud.firestore {
         (porteiro() && mesmoCondominio(condominioId))
       );
       allow delete: if false;
+    }
+
+    match /identificadoresUsuarios/{id} {
+      allow get, list: if false;
+      allow create: if logado()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.tipo in ['cpf', 'telefone']
+        && request.resource.data.chave == id;
+      allow update: if logado()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.tipo == resource.data.tipo
+        && request.resource.data.chave == resource.data.chave
+        && request.resource.data.chave == id;
+      allow delete: if logado() && resource.data.uid == request.auth.uid;
     }
 
     match /usuarios/{uid} {
@@ -128,6 +177,7 @@ service cloud.firestore {
       allow update: if logado()
         && request.auth.uid == uid
         && request.resource.data.tipo == resource.data.tipo
+        && request.resource.data.email == resource.data.email
         && (
           request.resource.data.condominioId == resource.data.get('condominioId', '') ||
           (
@@ -296,7 +346,8 @@ service cloud.firestore {
                 avisoPrevisaoValidoParaPortaria() ||
                 avisoDenunciaValidoParaPortaria() ||
                 avisoInteracaoEncomendaValidoParaPortaria())
-          )
+          ) ||
+          avisoRespostaMuralValido()
         );
 
       allow read: if logado() && (
@@ -364,7 +415,17 @@ service cloud.firestore {
         && !banidoNoMural(request.resource.data.condominioId, request.auth.uid)
         && request.resource.data.texto is string
         && request.resource.data.texto.size() > 0
-        && request.resource.data.texto.size() <= 1000;
+        && request.resource.data.texto.size() <= 1000
+        && (
+          !request.resource.data.keys().hasAny(['respostaParaId']) ||
+          (
+            request.resource.data.respostaParaId is string
+            && request.resource.data.respostaParaId.size() > 0
+            && request.resource.data.respostaParaAutorId is string
+            && request.resource.data.respostaParaAutorId.size() > 0
+            && request.resource.data.respostaParaAutorId != request.auth.uid
+          )
+        );
       allow update: if false;
       allow delete: if logado()
         && mesmoCondominio(resource.data.condominioId)
@@ -398,6 +459,19 @@ service cloud.firestore {
       );
       allow list: if porteiro() && mesmoCondominio(resource.data.condominioId);
       allow create, update: if porteiro() && mesmoCondominio(request.resource.data.condominioId);
+      allow delete: if false;
+    }
+
+    match /muralBanimentosPublicos/{id} {
+      allow read: if logado() && mesmoCondominio(resource.data.condominioId);
+      allow create, update: if porteiro()
+        && mesmoCondominio(request.resource.data.condominioId)
+        && request.resource.data.usuarioId is string
+        && request.resource.data.usuarioId.size() > 0
+        && request.resource.data.usuarioNome is string
+        && request.resource.data.usuarioNome.size() > 0
+        && request.resource.data.ativo is bool
+        && id == request.resource.data.condominioId + '_' + request.resource.data.usuarioId;
       allow delete: if false;
     }
 
