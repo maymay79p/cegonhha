@@ -1,81 +1,88 @@
-# Ativação do push no Android
+# Ativação do push e backend no Android
 
-O código do Cegonha já usa `expo-notifications`, registra `ExpoPushToken` no Firestore e possui uma Cloud Function que envia os avisos pelo Expo Push Service.
+O Cegonha usa `expo-notifications`, registra `ExpoPushToken` no Firestore e possui Cloud Functions para enviar avisos, processar lembretes automáticos e excluir/anomizar contas.
 
-Para o push remoto funcionar em uma build Android real, ainda é necessário configurar as credenciais nativas do projeto Firebase/EAS. Essas credenciais não devem ser inventadas nem copiadas de outro projeto.
+Para push remoto funcionar em uma build Android real, é necessário configurar as credenciais nativas do projeto Firebase/EAS. Chaves privadas nunca devem ser versionadas.
 
 ## 1. Registrar/confirmar o app Android no Firebase
 
-No projeto Firebase `cegonha-43403`, confirme que existe um aplicativo Android com o package:
+No projeto Firebase `cegonha-43403`, confirme um aplicativo Android com package:
 
 ```text
 com.maymay79p.cegonha
 ```
 
-Baixe o `google-services.json` desse aplicativo Android. Esse arquivo contém identificadores públicos do app Firebase e pode ser mantido na raiz do projeto se desejado.
-
-Depois, adicione em `app.json`, dentro de `expo.android`:
-
-```json
-"googleServicesFile": "./google-services.json"
-```
-
-Não use um `google-services.json` de outro package ou de outro projeto Firebase.
+Baixe o `google-services.json` correspondente e configure-o para a build usada na demonstração. Não reutilize arquivo de outro package ou projeto.
 
 ## 2. Configurar FCM V1 no EAS
 
-Gere/obtenha no Firebase uma chave de conta de serviço para FCM V1 e envie essa credencial ao EAS usando:
+Obtenha uma conta de serviço apropriada para FCM V1 e envie a credencial ao EAS por:
 
 ```bash
-eas credentials
+npx eas-cli@latest credentials -p android
 ```
 
-Caminho esperado no menu: Android → Google Service Account → Push Notifications (FCM V1).
+A chave privada da conta de serviço deve ficar somente no gerenciador de credenciais, nunca no GitHub.
 
-A chave privada da conta de serviço **não deve ser commitada no GitHub**. O `.gitignore` do Cegonha já bloqueia nomes comuns desses arquivos.
+## 3. Publicar regras e backend
 
-## 3. Publicar backend e regras
+A versão final possui:
+
+- `enviarPushDaNotificacao` — reage a novos documentos em `notificacoes`;
+- `processarLembretes3Dias` — roda diariamente às 09:00 no fuso de São Paulo;
+- `excluirMinhaConta` — exclusão/anomização autenticada e com sessão recente.
+
+Instale e teste:
 
 ```bash
-npm install
 npm install --prefix functions
+npm test --prefix functions
+```
+
+Publique regras + Functions:
+
+```bash
+npm run firebase:deploy:backend
+```
+
+Para publicar somente regras do Firestore:
+
+```bash
 npm run firebase:deploy
 ```
 
-O deploy publica:
-
-- as regras do Firestore, incluindo `pushDispositivos`;
-- a Cloud Function `enviarPushDaNotificacao`.
-
-Dependendo da configuração do projeto Firebase, a publicação de Cloud Functions pode exigir faturamento habilitado no projeto.
+Cloud Functions e Cloud Scheduler podem exigir faturamento habilitado no projeto Firebase.
 
 ## 4. Gerar nova build
 
-`expo-notifications` possui código nativo. Portanto, uma build antiga não passa a receber push apenas atualizando o JavaScript.
+`expo-notifications` possui código nativo. Uma build antiga não passa a receber push remoto apenas atualizando JavaScript.
+
+Para uma preview APK:
 
 ```bash
-eas build --profile development -p android
+npm run build:preview:android
 ```
 
-Instale o novo APK no aparelho e depois rode:
+Para development build:
 
 ```bash
-npm run start:dev
+npm run rebuild:android
+npm run dev
 ```
 
-## 5. Teste mínimo
+## 5. Teste mínimo em aparelho real
 
 Use dois logins vinculados ao mesmo condomínio.
 
-1. Abra a nova build como Morador e aceite a permissão de notificações.
-2. Confirme no Firestore que foi criado um documento em `pushDispositivos` para esse usuário.
+1. Abra a build como Morador e aceite notificações.
+2. Confirme que foi criado um documento em `pushDispositivos`.
 3. Entre como Portaria em outro aparelho/instalação.
 4. Registre uma encomenda para o Morador.
-5. Confirme que o aviso aparece na Central de Avisos e como notificação do sistema.
-6. Feche o Cegonha no aparelho do Morador e repita com uma nova encomenda para validar o recebimento em segundo plano.
-
-Repita o sentido inverso cadastrando uma entrega prevista ou enviando uma denúncia pelo Morador; a Portaria deve receber o push correspondente.
+5. Confirme o aviso na Central de Avisos e como notificação do sistema.
+6. Feche o Cegonha no aparelho do Morador e repita para validar segundo plano.
+7. Teste o sentido inverso registrando entrega prevista ou denúncia pelo Morador.
+8. Valide também a exclusão de uma conta de teste e o bloqueio de exclusão da última Portaria.
 
 ## Escopo de comunicação
 
-O Cegonha não propõe chat privado individual entre Morador e Portaria. A comunicação do projeto é composta por avisos operacionais automáticos e pelo Mural do condomínio como canal coletivo.
+O Cegonha não propõe chat privado Morador ↔ Portaria. A comunicação do projeto é composta por avisos operacionais e pelo Mural coletivo.
