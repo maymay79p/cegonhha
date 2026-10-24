@@ -141,6 +141,43 @@ try {
   const respostaSalva = await getDoc(respostaRef);
   assert.equal(respostaSalva.data()?.respostaParaId, originalRef.id, 'Resposta deve preservar a referência da mensagem respondida.');
 
+  const respostaForjadaRef = doc(collection(db, 'mural'));
+  await assert.rejects(
+    setDoc(respostaForjadaRef, {
+      condominioId: CONDOMINIO_ID,
+      autorId: moradorUid,
+      autorNome: 'Morador Teste',
+      autorTipo: 'morador',
+      texto: 'Tentativa de resposta com autor de destino adulterado.',
+      respostaParaId: originalRef.id,
+      respostaParaAutorId: moradorUid,
+      criadoEm: serverTimestamp(),
+      criadoEmCliente: Date.now(),
+    }),
+    erro => String(erro?.code || '').includes('permission-denied'),
+    'Nao deve ser possivel fabricar uma resposta para um autor diferente do autor da publicacao original.',
+  );
+
+  const denunciaForjadaRef = doc(collection(db, 'muralDenuncias'));
+  await assert.rejects(
+    setDoc(denunciaForjadaRef, {
+      condominioId: CONDOMINIO_ID,
+      comentarioId: originalRef.id,
+      comentarioTexto: 'Texto adulterado',
+      autorId: portariaUid,
+      autorNome: 'Portaria Teste',
+      autorTipo: 'porteiro',
+      denuncianteId: moradorUid,
+      denuncianteNome: 'Morador Teste',
+      motivo: 'Outro motivo',
+      detalhes: '',
+      criadoEm: serverTimestamp(),
+      status: 'pendente',
+    }),
+    erro => String(erro?.code || '').includes('permission-denied'),
+    'A denuncia precisa refletir a publicacao real e nao pode carregar texto adulterado.',
+  );
+
   await entrar(PORTARIA_EMAIL);
   const avisosPortaria = await getDocs(query(
     collection(db, 'notificacoes'),

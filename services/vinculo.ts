@@ -52,6 +52,7 @@ export async function solicitarVinculoPorCodigo({
   bloco,
   apartamento,
   codigo,
+  solicitanteTipo = 'morador',
 }: {
   moradorId: string;
   moradorNome: string;
@@ -59,6 +60,7 @@ export async function solicitarVinculoPorCodigo({
   bloco?: string;
   apartamento?: string;
   codigo: string;
+  solicitanteTipo?: 'morador' | 'porteiro';
 }) {
   const uidAtual = auth.currentUser?.uid || '';
   if (!uidAtual || uidAtual !== moradorId) {
@@ -99,6 +101,7 @@ export async function solicitarVinculoPorCodigo({
     condominioNome: condominio.nome,
     condominioCodigo: condominio.codigoExibicao,
     status: 'pendente',
+    solicitanteTipo,
     criadoEm: atual ? (dadosAtuais?.criadoEm || serverTimestamp()) : serverTimestamp(),
     atualizadoEm: serverTimestamp(),
   }, { merge: true });
@@ -109,7 +112,9 @@ export async function solicitarVinculoPorCodigo({
     remetenteNome: moradorNome,
     referenciaId: id,
     tipo: 'solicitacao_vinculo',
-    mensagem: `${moradorNome} solicitou entrada no condomínio${bloco || apartamento ? ` · Bloco ${bloco || '-'} · Ap. ${apartamento || '-'}` : ''}.`,
+    mensagem: solicitanteTipo === 'porteiro'
+      ? `${moradorNome} solicitou acesso como Portaria ao condomínio.`
+      : `${moradorNome} solicitou entrada no condomínio${bloco || apartamento ? ` · Bloco ${bloco || '-'} · Ap. ${apartamento || '-'}` : ''}.`,
     lidaPor: [],
     criadaEm: serverTimestamp(),
   });

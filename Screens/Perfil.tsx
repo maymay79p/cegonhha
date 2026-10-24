@@ -56,7 +56,7 @@ export default function Perfil({ navigation }: any) {
   }, [user?.uid]);
 
   useEffect(() => {
-    if (!user || perfil?.tipo !== 'morador' || perfil?.condominioId) {
+    if (!user || !perfil || perfil.condominioId) {
       setSolicitacao(null);
       return;
     }
@@ -105,7 +105,7 @@ export default function Perfil({ navigation }: any) {
     if (!user || !perfil || !codigo.trim()) return setErroDados('Digite o código do condomínio.');
     try {
       setSalvando(true);
-      const resultado = await solicitarVinculoPorCodigo({ moradorId:user.uid, moradorNome:perfil.nome, email:perfil.email, bloco:perfil.bloco, apartamento:perfil.apartamento, codigo });
+      const resultado = await solicitarVinculoPorCodigo({ moradorId:user.uid, moradorNome:perfil.nome, email:perfil.email, bloco:perfil.bloco, apartamento:perfil.apartamento, codigo, solicitanteTipo:perfil.tipo });
       setCodigo('');
       feedback.notify(resultado.status === 'aprovada' ? 'Sua entrada já foi aprovada. Toque em “Concluir vínculo”.' : 'A portaria recebeu sua solicitação de entrada.', { title:'Solicitação enviada', tone:'success' });
     } catch (e:any) { feedback.alert('Vínculo', e?.message || 'Não foi possível solicitar o vínculo.', undefined, 'danger'); }
@@ -202,8 +202,8 @@ export default function Perfil({ navigation }: any) {
       {!!perfil.condominioId && <TouchableOpacity style={styles.menuRow} onPress={()=>navigation.navigate('Condominio')}><View style={styles.menuLeft}><Ionicons name="location-outline" size={21} color={colors.text}/><Text style={styles.menuText}>Endereço e localização no mapa</Text></View><Ionicons name="chevron-forward" size={18} color={colors.muted}/></TouchableOpacity>}
     </View>
 
-    {isMorador && !perfil.condominioId && <View style={styles.card}>
-      <Text style={styles.cardLabel}>VINCULAR CONDOMÍNIO</Text>
+    {!perfil.condominioId && <View style={styles.card}>
+      <Text style={styles.cardLabel}>{isMorador ? 'VINCULAR CONDOMÍNIO' : 'SOLICITAR ACESSO À PORTARIA'}</Text>
       {!solicitacao || solicitacao.status === 'rejeitada' ? <><TextInput style={styles.input} placeholder="Código, ex.: ABC-2DEF" autoCapitalize="characters" autoCorrect={false} value={codigo} onChangeText={v=>{setCodigo(v);setErroDados('');}}/><TouchableOpacity style={styles.primary} onPress={solicitarCondominio} disabled={salvando}><Text style={styles.primaryText}>Enviar solicitação</Text></TouchableOpacity></> : null}
       {solicitacao?.status === 'pendente' && <View style={styles.statusBox}><Ionicons name="time-outline" size={20} color={colors.warning}/><Text style={styles.statusText}>Aguardando aprovação da portaria para {solicitacao.condominioNome}.</Text></View>}
       {solicitacao?.status === 'aprovada' && <><View style={styles.statusBox}><Ionicons name="checkmark-circle-outline" size={20} color={colors.success}/><Text style={styles.statusText}>Sua entrada foi aprovada.</Text></View><TouchableOpacity style={styles.primary} onPress={concluirVinculo}><Text style={styles.primaryText}>Concluir vínculo</Text></TouchableOpacity></>}

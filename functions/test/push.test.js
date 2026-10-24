@@ -30,9 +30,10 @@ test('monta push de chegada com dados de navegacao', () => {
   });
 });
 
-test('usa titulos claros para retirada solicitada e contestacao', () => {
+test('usa titulos claros para retirada solicitada, contestacao e resposta do mural', () => {
   assert.equal(tituloParaTipo('retirada_solicitada'), 'Morador informou retirada');
   assert.equal(tituloParaTipo('contestacao_encomenda'), 'Encomenda contestada');
+  assert.equal(tituloParaTipo('resposta_mural'), 'Nova resposta no mural');
 });
 
 test('ignora dispositivo inativo ou token invalido', () => {

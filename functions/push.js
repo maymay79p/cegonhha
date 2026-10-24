@@ -10,6 +10,7 @@ const TITULOS = {
   solicitacao_vinculo: 'Nova solicitação de morador',
   previsao: 'Nova entrega prevista',
   denuncia: 'Nova denúncia no mural',
+  resposta_mural: 'Nova resposta no mural',
 };
 
 function tokenExpoValido(token) {

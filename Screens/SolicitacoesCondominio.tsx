@@ -57,8 +57,8 @@ export default function SolicitacoesCondominio({ navigation }: any) {
         condominioId: item.condominioId,
         referenciaId: item.id,
         mensagem: status === 'aprovada'
-          ? 'Sua solicitação para entrar no condomínio foi aprovada. Abra o Perfil para concluir o vínculo.'
-          : 'Sua solicitação de vínculo com o condomínio foi recusada pela portaria.',
+          ? (item.solicitanteTipo === 'porteiro' ? 'Seu acesso como Portaria foi aprovado. Abra o Perfil para concluir o vínculo.' : 'Sua solicitação para entrar no condomínio foi aprovada. Abra o Perfil para concluir o vínculo.')
+          : (item.solicitanteTipo === 'porteiro' ? 'Seu pedido de acesso como Portaria foi recusado.' : 'Sua solicitação de vínculo com o condomínio foi recusada pela portaria.'),
         tipo: 'vinculo',
         lida: false,
         criadaEm: serverTimestamp(),
@@ -88,16 +88,16 @@ export default function SolicitacoesCondominio({ navigation }: any) {
   const exibidas = pendentes.filter(item => correspondeBusca(montarTextoBuscaPessoa({
     ...item,
     nome: item.moradorNome,
-    tipo: 'morador',
+    tipo: item.solicitanteTipo || 'morador',
   }), busca));
 
   return <SafeAreaView style={styles.safe}>
-    <View style={styles.header}><TouchableOpacity style={styles.back} onPress={() => navigation.goBack()} accessibilityLabel="Voltar"><Ionicons name="arrow-back" size={22} color={colors.text} /></TouchableOpacity><View style={{flex:1}}><Text style={styles.eyebrow}>CONDOMÍNIO</Text><Text style={styles.title}>Solicitações de entrada</Text><Text style={styles.subtitle}>Aprove somente moradores que pertencem ao condomínio.</Text></View></View>
+    <View style={styles.header}><TouchableOpacity style={styles.back} onPress={() => navigation.goBack()} accessibilityLabel="Voltar"><Ionicons name="arrow-back" size={22} color={colors.text} /></TouchableOpacity><View style={{flex:1}}><Text style={styles.eyebrow}>CONDOMÍNIO</Text><Text style={styles.title}>Solicitações de entrada</Text><Text style={styles.subtitle}>Aprove moradores e novas contas da portaria somente quando reconhecer a pessoa solicitante.</Text></View></View>
     <View style={styles.search}><Ionicons name="search-outline" size={19} color={colors.muted}/><TextInput style={styles.searchInput} placeholder="Nome, bloco, apartamento ou e-mail" value={busca} onChangeText={setBusca}/>{!!busca&&<TouchableOpacity onPress={()=>setBusca('')} accessibilityLabel="Limpar busca"><Ionicons name="close-circle" size={19} color={colors.muted}/></TouchableOpacity>}</View>
     {loading ? <LoadingCards /> : <FlatList contentContainerStyle={styles.list} data={exibidas} keyExtractor={i => i.id} ListEmptyComponent={<EmptyState icon="people-outline" title={pendentes.length ? 'Nenhuma solicitação encontrada' : 'Tudo em dia'} text={pendentes.length ? 'Tente buscar por nome, bloco, apartamento ou e-mail.' : 'Não há moradores aguardando aprovação.'} />} renderItem={({item}) => {
       const ocupado = processandoId === item.id;
       return <View style={styles.card}>
-        <Text style={styles.name}>{item.moradorNome}</Text><Text style={styles.meta}>Bloco {item.bloco || '-'} · Ap. {item.apartamento || '-'}</Text><Text style={styles.meta}>{item.email || ''}</Text>
+        <Text style={styles.name}>{item.moradorNome}</Text><Text style={styles.meta}>{item.solicitanteTipo === 'porteiro' ? 'Acesso solicitado: Portaria' : `Bloco ${item.bloco || '-'} · Ap. ${item.apartamento || '-'}`}</Text><Text style={styles.meta}>{item.email || ''}</Text>
         <View style={styles.actions}><TouchableOpacity style={[styles.reject, ocupado && styles.disabled]} onPress={() => decidir(item, 'rejeitada')} disabled={!!processandoId}><Text style={styles.rejectText}>{ocupado ? 'Salvando...' : 'Recusar'}</Text></TouchableOpacity><TouchableOpacity style={[styles.approve, ocupado && styles.disabled]} onPress={() => decidir(item, 'aprovada')} disabled={!!processandoId}><Ionicons name="checkmark" size={18} color="#fff" /><Text style={styles.approveText}>{ocupado ? 'Salvando...' : 'Aprovar'}</Text></TouchableOpacity></View>
       </View>;
     }} />}

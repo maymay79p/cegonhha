@@ -86,7 +86,7 @@ export default function PorteiroHome({ navigation }: any) {
       <TouchableOpacity style={styles.secondary} onPress={()=>navigation.navigate('EncomendaForm')}><Ionicons name="add-circle-outline" size={23} color={colors.porter}/><Text style={styles.secondaryTitle}>Registrar manualmente</Text></TouchableOpacity>
     </View>
 
-    <TouchableOpacity style={styles.requests} onPress={()=>navigation.navigate('SolicitacoesCondominio')}><View style={styles.requestLeft}><Ionicons name="person-add-outline" size={21} color={colors.porter}/><Text style={styles.requestText}>Solicitações de moradores</Text></View><View style={styles.requestCount}><Text style={styles.requestCountText}>{solicitacoes}</Text></View></TouchableOpacity>
+    <TouchableOpacity style={styles.requests} onPress={()=>navigation.navigate('SolicitacoesCondominio')}><View style={styles.requestLeft}><Ionicons name="person-add-outline" size={21} color={colors.porter}/><Text style={styles.requestText}>Solicitações de entrada</Text></View><View style={styles.requestCount}><Text style={styles.requestCountText}>{solicitacoes}</Text></View></TouchableOpacity>
     <TouchableOpacity style={styles.people} onPress={()=>navigation.navigate('PessoasCondominio')}><View style={styles.requestLeft}><Ionicons name="people-outline" size={21} color={colors.porter}/><View><Text style={styles.requestText}>Pessoas do condomínio</Text><Text style={styles.peopleHint}>Moradores e usuários da portaria vinculados</Text></View></View><Ionicons name="chevron-forward" size={18} color={colors.muted}/></TouchableOpacity>
 
     <View style={styles.quickRow}>

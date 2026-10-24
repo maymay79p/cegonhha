@@ -187,9 +187,9 @@ export default function Register({ route, navigation }: any) {
       cpf: pendente.cpf,
       email: pendente.email,
       tipo: pendente.tipo,
-      condominioId: pendente.tipo === 'porteiro' ? (pendente.condominioPorteiro?.id || '') : '',
-      condominioNome: pendente.tipo === 'porteiro' ? (pendente.condominioPorteiro?.nome || '') : '',
-      condominioCodigo: pendente.tipo === 'porteiro' ? (pendente.condominioPorteiro?.codigoExibicao || '') : '',
+      condominioId: pendente.tipo === 'porteiro' && pendente.modoPorteiro === 'criar' ? (pendente.condominioPorteiro?.id || '') : '',
+      condominioNome: pendente.tipo === 'porteiro' && pendente.modoPorteiro === 'criar' ? (pendente.condominioPorteiro?.nome || '') : '',
+      condominioCodigo: pendente.tipo === 'porteiro' && pendente.modoPorteiro === 'criar' ? (pendente.condominioPorteiro?.codigoExibicao || '') : '',
       bloco: pendente.bloco,
       apartamento: pendente.apartamento,
       telefone: pendente.telefone,
@@ -199,7 +199,11 @@ export default function Register({ route, navigation }: any) {
   }
 
   async function criarSolicitacaoMorador(perfilCriado: PerfilUsuario, pendente: CadastroPendente) {
-    if (pendente.tipo !== 'morador' || !pendente.codigoCondominio.trim()) return null;
+    const precisaSolicitar = !!pendente.codigoCondominio.trim() && (
+      pendente.tipo === 'morador' ||
+      (pendente.tipo === 'porteiro' && pendente.modoPorteiro === 'entrar')
+    );
+    if (!precisaSolicitar) return null;
     return solicitarVinculoPorCodigo({
       moradorId: perfilCriado.id,
       moradorNome: perfilCriado.nome,
@@ -207,6 +211,7 @@ export default function Register({ route, navigation }: any) {
       bloco: perfilCriado.bloco,
       apartamento: perfilCriado.apartamento,
       codigo: pendente.codigoCondominio,
+      solicitanteTipo: pendente.tipo,
     });
   }
 
@@ -260,7 +265,9 @@ export default function Register({ route, navigation }: any) {
         : 'E-mail confirmado, conta criada e solicitação de entrada enviada para a portaria.';
     }
     if (pendente.tipo === 'morador') return 'E-mail confirmado e conta criada. Você pode vincular o condomínio depois pelo Perfil.';
-    if (pendente.modoPorteiro === 'entrar') return 'E-mail confirmado e cadastro da portaria concluído.';
+    if (pendente.modoPorteiro === 'entrar') return solicitacaoErro
+      ? 'E-mail confirmado. Não foi possível enviar o pedido de acesso à portaria; tente novamente pelo Perfil.'
+      : 'E-mail confirmado. Seu pedido para entrar como Portaria foi enviado e aguarda aprovação de uma conta da portaria já vinculada.';
     return 'E-mail confirmado, cadastro da portaria concluído e condomínio criado.';
   }
 
