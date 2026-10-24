@@ -73,6 +73,23 @@ npm run firebase:deploy:push
 
 A publicação de Functions exige que o projeto Firebase permita Cloud Functions/Artifact Registry. Se o backend de push não estiver publicado, a Central de Avisos interna continua funcionando.
 
+## Segurança e integridade dos dados
+
+As regras do Firestore são a barreira de autorização do Cegonha e não confiam apenas nas validações das telas. Entre as proteções atuais estão:
+
+- acesso aos dados operacionais somente por usuários autenticados com e-mail verificado;
+- isolamento por condomínio e separação de permissões entre Morador e Portaria;
+- novas contas da Portaria em condomínio existente dependem de aprovação de uma Portaria já vinculada;
+- nomes, perfis e metadados de autoria são conferidos com o perfil autenticado para impedir impersonação por clientes modificados;
+- encomendas conferem Portaria, Morador, bloco e apartamento contra os registros reais do condomínio;
+- respostas, denúncias e banimentos do Mural são vinculados aos registros reais que originaram a ação;
+- endereço do condomínio fica em documento privado acessível apenas a contas vinculadas;
+- CPF, telefone e e-mail usam reservas de unicidade sem permitir leitura pública da coleção de identificadores;
+- o perfil completo não é persistido em cache local do aplicativo;
+- o CI usa instalações reproduzíveis, auditoria de dependências, testes com emuladores do Firebase e busca por assinaturas comuns de credenciais privadas.
+
+As regras versionadas no GitHub só passam a valer no projeto Firebase real depois de executar `npm run firebase:deploy` com uma conta autorizada. Chaves privadas, contas de serviço e outros segredos nunca devem ser versionados.
+
 ## Recursos principais
 
 - cadastro e atualização de dados pessoais;
@@ -192,13 +209,17 @@ No Expo Go o módulo de push remoto é substituído por um stub seguro. Para And
 
 O GitHub Actions:
 
-- instala as dependências do app;
+- instala as dependências do app de forma reproduzível;
+- audita dependências de produção;
 - verifica se as versões são compatíveis com o Expo;
 - verifica TypeScript;
+- testa OCR e pesquisas do aplicativo;
+- executa os emuladores do Firebase para validar vínculo, autorização e ataques de integridade;
 - executa Expo Doctor;
 - gera o bundle do modo Expo Go;
 - executa `expo prebuild` para validar os recursos nativos opcionais;
-- instala e testa o backend de push.
+- instala, audita e testa o backend de push;
+- procura padrões comuns de credenciais privadas versionadas.
 
 ## Observações
 
