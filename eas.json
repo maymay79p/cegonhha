@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 16.0.0"
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -8,23 +9,18 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
-      "env": {
-        "EAS_NO_FROZEN_LOCKFILE": "1"
       }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
-      "env": {
-        "EAS_NO_FROZEN_LOCKFILE": "1"
       }
     },
     "production": {
-      "env": {
-        "EAS_NO_FROZEN_LOCKFILE": "1"
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
       }
     }
   },

@@ -17,6 +17,7 @@
     "build:android": "node scripts/rebuild-android.js",
     "rebuild:android": "node scripts/rebuild-android.js",
     "build:preview:android": "npx eas-cli@latest build --profile preview -p android --clear-cache",
+    "build:final:android": "npx eas-cli@latest build --profile preview -p android --clear-cache",
     "check:expo-go": "node scripts/check-expo-go.js",
     "check:versions": "npx expo install --check",
     "check": "npm run check:versions && npm run typecheck && npm run test:ocr && npm run test:busca && npm run check:expo-go && npx expo-doctor@latest",
@@ -28,7 +29,9 @@
     "firebase:rules": "npx firebase-tools@latest deploy --only firestore:rules --project cegonha-43403",
     "firebase:functions": "npx firebase-tools@latest deploy --only functions --project cegonha-43403",
     "firebase:deploy": "npm run firebase:rules",
-    "firebase:deploy:push": "npm run firebase:rules && npm run firebase:functions"
+    "firebase:deploy:backend": "npm run firebase:functions",
+    "firebase:deploy:prod": "npm run firebase:rules && npm run firebase:functions",
+    "firebase:deploy:push": "npm run firebase:deploy:prod"
   },
   "dependencies": {
     "@expo-google-fonts/eb-garamond": "^0.4.3",

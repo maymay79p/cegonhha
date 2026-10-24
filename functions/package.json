@@ -7,7 +7,7 @@
     "node": "22"
   },
   "scripts": {
-    "check": "node --check index.js && node --check push.js",
+    "check": "node --check index.js && node --check push.js && node --check maintenance.js",
     "test": "npm run check && node --test test/*.test.js"
   },
   "dependencies": {

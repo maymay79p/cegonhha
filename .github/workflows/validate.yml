@@ -9,7 +9,7 @@ on:
 jobs:
   typecheck:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Baixar código
         uses: actions/checkout@v4
@@ -47,7 +47,7 @@ jobs:
       - name: Testar pesquisas do aplicativo
         run: npm run test:busca
 
-      - name: Validar vínculo e regras do Firestore
+      - name: Validar fluxo completo, vínculo e regras do Firestore
         run: npx firebase-tools@latest emulators:exec --only auth,firestore --project demo-cegonha "node scripts/test-vinculo-emulator.mjs && node scripts/test-comunidade-seguranca-emulator.mjs"
 
       - name: Executar Expo Doctor
@@ -56,8 +56,19 @@ jobs:
       - name: Validar bundle do Expo Go
         run: npm run check:expo-go
 
-      - name: Validar prebuild Android dos recursos nativos opcionais
+      - name: Validar prebuild Android dos recursos nativos
         run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Gerar APK Android de validação
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Publicar APK de validação
+        uses: actions/upload-artifact@v4
+        with:
+          name: cegonha-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
 
       - name: Instalar dependências reproduzíveis das Functions
         run: npm ci --prefix functions --no-audit --no-fund
@@ -65,7 +76,7 @@ jobs:
       - name: Auditar dependências das Functions
         run: npm audit --prefix functions --omit=dev --audit-level=high
 
-      - name: Testar push notifications
+      - name: Testar backend, push e rotinas de manutenção
         run: npm test --prefix functions
 
       - name: Procurar assinaturas de credenciais privadas no estado atual
