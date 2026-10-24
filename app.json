@@ -8,11 +8,6 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#F8F5F0"
-    },
     "plugins": [
       [
         "expo-image-picker",
@@ -30,10 +25,20 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#F8F5F0"
+      },
+      "splash": {
+        "image": "./assets/splash-icon.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#F8F5F0"
       }
     },
     "ios": {
-      "bundleIdentifier": "com.maymay79p.cegonha"
+      "bundleIdentifier": "com.maymay79p.cegonha",
+      "splash": {
+        "image": "./assets/splash-icon.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#F8F5F0"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
