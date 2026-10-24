@@ -1,130 +1,161 @@
-# Rodar o Cegonha sem sofrimento
+# Rodar, testar e publicar o Cegonha
 
-O modo recomendado voltou a ser o **Expo Go**. O OCR agora usa a API do OCR.Space e, por isso, não precisa mais de módulo nativo nem de uma APK nova para funcionar.
+## Desenvolvimento rápido
 
-## Depois de baixar/atualizar o projeto
-
-Na pasta do projeto:
+Depois de baixar/atualizar o projeto:
 
 ```bash
 git pull origin main
 npm run setup
-```
-
-O `npm run setup` instala as dependências, confere se as versões são compatíveis com o Expo SDK 57 e valida o TypeScript.
-
-Depois, para abrir o app:
-
-```bash
 npm start
 ```
 
-O `npm start` abre o **Expo Go**, limpa o cache do Metro e é o caminho recomendado para testar o Cegonha no dia a dia.
+`npm run setup` instala as dependências, confere as versões esperadas pelo Expo e valida o TypeScript. O `postinstall` prepara os assets oficiais da marca do Cegonha.
+
+`npm start` abre o modo Expo Go com cache limpo.
 
 ## O que funciona no Expo Go
 
 - login por e-mail e senha;
 - cadastro e perfil;
-- condomínio;
+- condomínio e vínculos;
 - encomendas e histórico;
-- confirmação de chegada;
-- OCR.Space por câmera ou galeria;
+- OCR.Space por câmera/galeria;
 - Mural e denúncias;
 - relatórios;
 - previsões;
 - Central de Avisos;
-- Firestore em tempo real.
+- Firestore em tempo real;
+- temas e acessibilidade.
 
-O OCR.Space precisa de internet porque a imagem comprimida é enviada à API para reconhecimento. O Cegonha não salva a foto da etiqueta nem o texto bruto no Firestore.
+Google Sign-In nativo e push remoto com o app fechado exigem development build/APK.
 
-## OCR.Space
+A exclusão de conta aparece na interface, mas depende da Cloud Function `excluirMinhaConta` estar publicada.
 
-Não é obrigatório configurar uma chave só para abrir o app. Sem variável de ambiente, o Cegonha usa a chave pública de teste `helloworld`, que serve para testes rápidos e possui limite baixo.
+## Identidade visual
 
-Para uso mais estável, crie uma chave gratuita no OCR.Space e crie um arquivo `.env.local` na raiz do projeto:
-
-```env
-EXPO_PUBLIC_OCR_SPACE_API_KEY=sua_chave_aqui
-```
-
-Depois reinicie:
+Antes de start/build, os arquivos de ícone/splash são preparados por:
 
 ```bash
-npm start
+npm run prepare:brand
 ```
 
-A foto é comprimida automaticamente para ficar abaixo do limite do plano gratuito. Depois da leitura, você pode remover apenas a foto da tela e manter os dados reconhecidos, ou descartar a leitura inteira.
+Os comandos normais já chamam essa preparação automaticamente. A configuração final está em `app.json`.
 
-## Quando ainda preciso de development build?
-
-Somente para recursos nativos opcionais:
-
-- Google Sign-In nativo;
-- push notification remota com o app fechado.
-
-Para isso:
-
-```bash
-npm run rebuild:android
-```
-
-Instale a APK e depois rode:
-
-```bash
-npm run dev
-```
-
-Não use development build para testar o OCR: ela não é mais necessária para isso.
-
-## Firebase
-
-Para publicar somente as regras do Firestore:
-
-```bash
-npm run firebase:deploy
-```
-
-Esse comando não publica Cloud Functions e não exige Blaze.
-
-O backend opcional de push continua separado:
-
-```bash
-npm install --prefix functions
-npm run firebase:deploy:push
-```
-
-## Se algo não abrir
-
-Tente nesta ordem:
-
-```bash
-git pull origin main
-npm run setup
-npm start
-```
-
-Se quiser conferir tudo de uma vez:
+## Checagem local
 
 ```bash
 npm run check
 ```
 
-Esse comando verifica versões do Expo, TypeScript, bundle do Expo Go e Expo Doctor.
-
-## Comandos principais
+Para validar também regras e fluxo completo com emuladores:
 
 ```bash
-npm run setup             # instala e verifica dependências
-npm start                 # Expo Go, modo recomendado
-npm run check             # versões + TypeScript + bundle + Expo Doctor
-npm run typecheck         # valida TypeScript
-npm run firebase:deploy   # publica somente regras do Firestore
-npm run rebuild:android   # somente para Google Sign-In nativo/push
-npm run dev               # abre a development build já instalada
+npm run test:emulator
 ```
 
-## Regra prática
+O fluxo inclui Morador + Portaria, vínculo, chegada, aviso, solicitação e confirmação de retirada, Mural e testes de autorização.
 
-**Quer desenvolver/testar o Cegonha e o OCR? → `npm start`.**
+## APK de demonstração
 
-**Quer testar Google Sign-In nativo ou push remoto? → development build.**
+### Via EAS
+
+```bash
+npm run build:preview:android
+```
+
+O perfil `preview` produz APK de distribuição interna.
+
+### Via CI
+
+O workflow `Validar Cegonha` também executa `expo prebuild` e `./gradlew assembleRelease`. Quando a execução termina com sucesso, a APK fica disponível nos **Artifacts** da execução do GitHub Actions com nome `Cegonha-Android-<sha>`.
+
+Esse artefato é útil para congelar exatamente a versão usada na banca.
+
+## Development build
+
+Para Google Sign-In nativo e testes locais de push:
+
+```bash
+npm run rebuild:android
+```
+
+Instale a APK gerada e depois:
+
+```bash
+npm run dev
+```
+
+## Firebase Rules
+
+Publicar apenas as regras do Firestore:
+
+```bash
+npm run firebase:deploy
+```
+
+Esse é o mínimo necessário sempre que `firestore.rules` mudar.
+
+## Backend completo
+
+A versão final possui três funções:
+
+- `enviarPushDaNotificacao`;
+- `processarLembretes3Dias`;
+- `excluirMinhaConta`.
+
+Para publicar regras + Functions:
+
+```bash
+npm install --prefix functions
+npm run firebase:deploy:backend
+```
+
+A função agendada roda diariamente às 09:00 no fuso de São Paulo e envia o lembrete quando uma encomenda permanece pendente por três dias ou mais. O painel da Portaria continua com o mecanismo antigo como fallback.
+
+Cloud Functions/Cloud Scheduler podem exigir projeto Firebase com faturamento habilitado.
+
+## OCR.Space
+
+Sem variável de ambiente, o app usa a chave pública `helloworld`, adequada apenas a testes rápidos e com limite baixo.
+
+Para uso mais estável, crie `.env.local`:
+
+```env
+EXPO_PUBLIC_OCR_SPACE_API_KEY=sua_chave_aqui
+```
+
+A imagem é comprimida antes do envio. O Cegonha não salva a fotografia nem o texto bruto do OCR no Firestore.
+
+## Login Google
+
+O package Android é:
+
+```text
+com.maymay79p.cegonha
+```
+
+Se a APK retornar `DEVELOPER_ERROR`, confira a SHA-1 da credencial usada pelo EAS:
+
+```bash
+npx eas-cli@latest credentials -p android
+```
+
+A SHA-1 precisa estar cadastrada no cliente Android correspondente no Firebase/Google Cloud.
+
+## Checklist antes da banca
+
+```text
+[ ] git pull origin main
+[ ] npm ci
+[ ] npm run check
+[ ] npm run test:emulator
+[ ] npm test --prefix functions
+[ ] GitHub Actions verde
+[ ] APK do mesmo commit instalada no celular
+[ ] regras/Functions publicadas no Firebase usado na demonstração
+[ ] login Portaria testado
+[ ] login Morador testado
+[ ] câmera/OCR testado em aparelho real
+[ ] chegada e retirada testadas ponta a ponta
+```
