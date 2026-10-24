@@ -1,0 +1,52 @@
+name: Endurecimento final de seguranca
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/security-hardening-final.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.1
+          cache: npm
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Aplicar endurecimento
+        run: python scripts/security-hardening-final.py
+
+      - name: Instalar dependencias
+        run: npm ci --no-audit --no-fund
+
+      - name: Verificar TypeScript
+        run: npm run typecheck
+
+      - name: Testar regras e ataques de integridade
+        run: npx firebase-tools@latest emulators:exec --only auth,firestore --project demo-cegonha "node scripts/test-vinculo-emulator.mjs && node scripts/test-comunidade-seguranca-emulator.mjs"
+
+      - name: Conferir diff
+        run: git diff --check
+
+      - name: Commitar somente se tudo passou
+        run: |
+          git config user.name "Cegonha Security Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "security: reforcar integridade de identidades e registros"
+          git push origin HEAD:main
