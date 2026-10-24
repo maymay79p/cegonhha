@@ -10,6 +10,19 @@
     "icon": "./assets/icon.png",
     "plugins": [
       [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F8F5F0",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "dark": {
+            "backgroundColor": "#12100F",
+            "image": "./assets/splash-icon.png"
+          }
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "cameraPermission": "O Cegonha precisa usar a câmera para fotografar etiquetas de encomendas.",
@@ -25,20 +38,10 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#F8F5F0"
-      },
-      "splash": {
-        "image": "./assets/splash-icon.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#F8F5F0"
       }
     },
     "ios": {
-      "bundleIdentifier": "com.maymay79p.cegonha",
-      "splash": {
-        "image": "./assets/splash-icon.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#F8F5F0"
-      }
+      "bundleIdentifier": "com.maymay79p.cegonha"
     },
     "web": {
       "favicon": "./assets/favicon.png"
