@@ -4,12 +4,15 @@ import {
   connectAuthEmulator,
   createUserWithEmailAndPassword,
   getAuth,
+  reload,
+  sendEmailVerification,
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
 import {
   collection,
   connectFirestoreEmulator,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -47,10 +50,36 @@ async function entrar(email) {
   return signInWithEmailAndPassword(auth, email, SENHA);
 }
 
+async function confirmarEmailNoEmulador(user) {
+  await sendEmailVerification(user);
+  const resposta = await fetch(`http://127.0.0.1:9099/emulator/v1/projects/${PROJECT_ID}/oobCodes`);
+  const dados = await resposta.json();
+  const codigo = [...(dados.oobCodes || [])]
+    .reverse()
+    .find(item => item.email === user.email && item.requestType === 'VERIFY_EMAIL');
+  if (!codigo?.oobLink) throw new Error(`Código de verificação não encontrado para ${user.email}`);
+  const verificacao = await fetch(codigo.oobLink);
+  if (!verificacao.ok) throw new Error(`Falha ao confirmar e-mail no Auth Emulator: ${verificacao.status}`);
+  await reload(user);
+  await user.getIdToken(true);
+}
+
 try {
   // 1) Portaria cria o condomínio e seu próprio perfil.
   const portariaCred = await createUserWithEmailAndPassword(auth, PORTARIA_EMAIL, SENHA);
   const portariaUid = portariaCred.user.uid;
+  await assert.rejects(
+    setDoc(doc(db, 'condominios', CONDOMINIO_ID), {
+      nome: 'Tentativa antes da verificação',
+      codigo: CONDOMINIO_ID,
+      codigoExibicao: 'G7C-J785',
+      criadoPor: portariaUid,
+      criadoEm: serverTimestamp(),
+    }),
+    erro => String(erro?.code || '').includes('permission-denied'),
+    'Conta de e-mail ainda não verificado não pode gravar dados protegidos.',
+  );
+  await confirmarEmailNoEmulador(portariaCred.user);
   await setDoc(doc(db, 'condominios', CONDOMINIO_ID), {
     nome: 'Condomínio Teste',
     codigo: CONDOMINIO_ID,
@@ -66,11 +95,21 @@ try {
     condominioNome: 'Condomínio Teste',
     condominioCodigo: 'G7C-J785',
   });
+  await setDoc(doc(db, 'diretorioUsuarios', portariaUid), {
+    uid: portariaUid,
+    nome: 'Portaria Teste',
+    tipo: 'porteiro',
+    condominioId: CONDOMINIO_ID,
+    bloco: '',
+    apartamento: '',
+    atualizadoEm: serverTimestamp(),
+  });
 
   // 2) Uma conta nova de morador nasce sem condomínio.
   await signOut(auth);
   const moradorCred = await createUserWithEmailAndPassword(auth, MORADOR_EMAIL, SENHA);
   const moradorUid = moradorCred.user.uid;
+  await confirmarEmailNoEmulador(moradorCred.user);
   await setDoc(doc(db, 'usuarios', moradorUid), {
     nome: 'Morador Teste',
     email: MORADOR_EMAIL,
@@ -80,6 +119,15 @@ try {
     condominioCodigo: '',
     bloco: 'A',
     apartamento: '101',
+  });
+  await setDoc(doc(db, 'diretorioUsuarios', moradorUid), {
+    uid: moradorUid,
+    nome: 'Morador Teste',
+    tipo: 'morador',
+    condominioId: '',
+    bloco: 'A',
+    apartamento: '101',
+    atualizadoEm: serverTimestamp(),
   });
 
   const solicitacaoId = `${moradorUid}_${CONDOMINIO_ID}`;
@@ -183,15 +231,62 @@ try {
   });
   await conclusao.commit();
   assert.equal((await getDoc(doc(db, 'usuarios', moradorUid))).data()?.condominioId, CONDOMINIO_ID);
+  await setDoc(doc(db, 'diretorioUsuarios', moradorUid), {
+    uid: moradorUid,
+    nome: 'Morador Teste',
+    tipo: 'morador',
+    condominioId: CONDOMINIO_ID,
+    bloco: 'A',
+    apartamento: '101',
+    atualizadoEm: serverTimestamp(),
+  });
 
-  // 6) Lista de pessoas: os dois perfis do condomínio são visíveis aos vinculados.
-  const consultaPessoas = query(collection(db, 'usuarios'), where('condominioId', '==', CONDOMINIO_ID));
+  // 6) Diretório mínimo: moradores veem dados operacionais, mas não os perfis privados alheios.
+  const consultaPessoas = query(collection(db, 'diretorioUsuarios'), where('condominioId', '==', CONDOMINIO_ID));
   const pessoasComoMorador = await getDocs(consultaPessoas);
   assert.equal(pessoasComoMorador.size, 2);
   assert.deepEqual(new Set(pessoasComoMorador.docs.map(d => d.data().tipo)), new Set(['morador', 'porteiro']));
+  assert.equal(pessoasComoMorador.docs.some(d => 'cpf' in d.data() || 'telefone' in d.data() || 'email' in d.data()), false, 'Diretório não pode conter CPF, telefone ou e-mail.');
+
+  await assert.rejects(
+    getDoc(doc(db, 'usuarios', portariaUid)),
+    erro => String(erro?.code || '').includes('permission-denied'),
+    'Morador não pode abrir o perfil privado da Portaria.',
+  );
+  await assert.rejects(
+    getDocs(query(collection(db, 'usuarios'), where('condominioId', '==', CONDOMINIO_ID))),
+    erro => String(erro?.code || '').includes('permission-denied'),
+    'Morador não pode listar perfis privados do condomínio.',
+  );
+  await assert.rejects(
+    updateDoc(doc(db, 'diretorioUsuarios', moradorUid), { nome: 'Nome Forjado', atualizadoEm: serverTimestamp() }),
+    erro => String(erro?.code || '').includes('permission-denied'),
+    'Usuário não pode falsificar no diretório um nome diferente do próprio perfil privado.',
+  );
+  await assert.rejects(
+    getDocs(query(collection(db, 'solicitacoesCondominio'), where('condominioId', '==', CONDOMINIO_ID))),
+    erro => String(erro?.code || '').includes('permission-denied'),
+    'Morador vinculado não pode listar solicitações de entrada do condomínio.',
+  );
 
   // 7) Fluxo principal: OCR confirmado -> chegada -> aviso -> código -> retirada.
   await entrar(PORTARIA_EMAIL);
+  const perfilPrivadoMorador = await getDoc(doc(db, 'usuarios', moradorUid));
+  assert.equal(perfilPrivadoMorador.exists(), true, 'Portaria do mesmo condomínio pode consultar o perfil privado necessário ao atendimento.');
+
+  const encomendaInvalidaRef = doc(collection(db, 'encomendas'));
+  await assert.rejects(
+    setDoc(encomendaInvalidaRef, {
+      moradorId: 'uid-inexistente', moradorNome: 'Inexistente', bloco: 'X', apartamento: '0',
+      descricao: 'Tentativa inválida', status: 'pendente', porteiroId: portariaUid,
+      porteiroNome: 'Portaria Teste', condominioId: CONDOMINIO_ID, codigoReferencia: 'INVALIDA',
+      codigoRetirada: '123456', codigoRetiradaConfirmado: false, origem: 'manual',
+      recebidaEm: serverTimestamp(), retiradaEm: null, historico: [], lembrete3dEnviado: false,
+    }),
+    erro => String(erro?.code || '').includes('permission-denied'),
+    'Portaria não pode criar encomenda para usuário inexistente ou fora do condomínio.',
+  );
+
   const encomendaRef = doc(collection(db, 'encomendas'));
   const chegadaAvisoRef = doc(collection(db, 'notificacoes'));
   const chegadaAuditoriaRef = doc(collection(db, 'auditoria'));
@@ -239,6 +334,22 @@ try {
     criadoEm: serverTimestamp(),
   });
   await chegada.commit();
+
+  await assert.rejects(
+    updateDoc(encomendaRef, { codigoRetirada: '000000' }),
+    erro => String(erro?.code || '').includes('permission-denied'),
+    'Nem a Portaria pode trocar o código de retirada depois da criação.',
+  );
+  await assert.rejects(
+    updateDoc(encomendaRef, { moradorId: portariaUid }),
+    erro => String(erro?.code || '').includes('permission-denied'),
+    'Nem a Portaria pode transferir uma encomenda para outro usuário alterando o documento.',
+  );
+  await assert.rejects(
+    deleteDoc(encomendaRef),
+    erro => String(erro?.code || '').includes('permission-denied'),
+    'Encomendas são registros de auditoria e não podem ser apagadas pelo cliente.',
+  );
 
   // O teste não chama OCR.Space externo; valida a persistência que ocorre depois
   // de a Portaria confirmar o resultado reconhecido no app.
@@ -429,6 +540,7 @@ try {
   await signOut(auth);
   const outraPortariaCred = await createUserWithEmailAndPassword(auth, OUTRA_PORTARIA_EMAIL, SENHA);
   const outraPortariaUid = outraPortariaCred.user.uid;
+  await confirmarEmailNoEmulador(outraPortariaCred.user);
   await setDoc(doc(db, 'condominios', OUTRO_CONDOMINIO_ID), {
     nome: 'Outro Condomínio',
     codigo: OUTRO_CONDOMINIO_ID,

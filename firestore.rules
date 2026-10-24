@@ -1,7 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function logado() { return request.auth != null; }
+    function logado() {
+      return request.auth != null
+        && request.auth.token.email_verified == true;
+    }
     function perfil() { return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data; }
     function porteiro() {
       return logado()
@@ -37,6 +40,28 @@ service cloud.firestore {
     function moradorNoCondominio(uid, condominioId) {
       return moradorExiste(uid)
         && get(/databases/$(database)/documents/usuarios/$(uid)).data.get('condominioId', '') == condominioId;
+    }
+
+    function diretorioValido(uid) {
+      return logado()
+        && request.auth.uid == uid
+        && existsAfter(/databases/$(database)/documents/usuarios/$(uid))
+        && request.resource.data.keys().hasOnly(['uid','nome','tipo','condominioId','bloco','apartamento','atualizadoEm'])
+        && request.resource.data.uid == uid
+        && request.resource.data.nome == getAfter(/databases/$(database)/documents/usuarios/$(uid)).data.get('nome', '')
+        && request.resource.data.tipo == getAfter(/databases/$(database)/documents/usuarios/$(uid)).data.get('tipo', '')
+        && request.resource.data.condominioId == getAfter(/databases/$(database)/documents/usuarios/$(uid)).data.get('condominioId', '')
+        && request.resource.data.bloco == getAfter(/databases/$(database)/documents/usuarios/$(uid)).data.get('bloco', '')
+        && request.resource.data.apartamento == getAfter(/databases/$(database)/documents/usuarios/$(uid)).data.get('apartamento', '')
+        && request.resource.data.nome is string
+        && request.resource.data.nome.size() > 0
+        && request.resource.data.nome.size() <= 120
+        && request.resource.data.tipo in ['morador','porteiro']
+        && request.resource.data.condominioId is string
+        && request.resource.data.bloco is string
+        && request.resource.data.bloco.size() <= 30
+        && request.resource.data.apartamento is string
+        && request.resource.data.apartamento.size() <= 30;
     }
 
     function solicitacaoAprovadaPara(novoCondominioId, solicitacaoId) {
@@ -140,34 +165,56 @@ service cloud.firestore {
     }
 
     match /condominios/{condominioId} {
+      // Este documento funciona como convite por código e por isso pode ser
+      // consultado sem sessão. Ele não pode conter endereço ou outros detalhes privados.
       allow get: if true;
       allow list: if false;
       allow create: if logado()
+        && request.resource.data.keys().hasOnly(['nome','codigo','codigoExibicao','criadoPor','criadoEm'])
         && request.resource.data.criadoPor == request.auth.uid
         && request.resource.data.codigo == condominioId
         && request.resource.data.nome is string
-        && request.resource.data.nome.size() >= 3;
+        && request.resource.data.nome.size() >= 3
+        && request.resource.data.nome.size() <= 160;
       allow update: if logado()
         && (resource.data.criadoPor == request.auth.uid || (porteiro() && mesmoCondominio(condominioId)))
         && request.resource.data.criadoPor == resource.data.criadoPor
         && request.resource.data.codigo == resource.data.codigo
         && request.resource.data.get('codigoExibicao', '') == resource.data.get('codigoExibicao', '')
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'endereco', 'atualizadoEm']);
+        && !request.resource.data.keys().hasAny(['endereco'])
+        && request.resource.data.nome is string
+        && request.resource.data.nome.size() >= 3
+        && request.resource.data.nome.size() <= 160
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome','endereco','atualizadoEm']);
+      allow delete: if false;
+    }
+
+    match /condominioDetalhes/{condominioId} {
+      allow read: if logado() && mesmoCondominio(condominioId);
+      allow create, update: if porteiro()
+        && mesmoCondominio(condominioId)
+        && request.resource.data.keys().hasOnly(['endereco','atualizadoEm'])
+        && request.resource.data.endereco is string
+        && request.resource.data.endereco.size() >= 5
+        && request.resource.data.endereco.size() <= 300;
       allow delete: if false;
     }
 
     match /identificadoresUsuarios/{id} {
       allow get, list: if false;
       allow create: if logado()
+        && request.resource.data.keys().hasOnly(['uid','tipo','chave','atualizadoEm'])
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.tipo in ['cpf', 'telefone', 'email']
         && request.resource.data.chave == id;
       allow update: if logado()
         && resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid','tipo','chave','atualizadoEm'])
         && request.resource.data.uid == resource.data.uid
         && request.resource.data.tipo == resource.data.tipo
         && request.resource.data.chave == resource.data.chave
-        && request.resource.data.chave == id;
+        && request.resource.data.chave == id
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['atualizadoEm']);
       allow delete: if logado() && resource.data.uid == request.auth.uid;
     }
 
@@ -187,14 +234,35 @@ service cloud.firestore {
             ))
         );
       allow read: if logado() && (
-        request.auth.uid == uid || mesmoCondominio(resource.data.get('condominioId', ''))
+        request.auth.uid == uid ||
+        (porteiro() && mesmoCondominio(resource.data.get('condominioId', '')))
       );
       allow update: if logado()
         && request.auth.uid == uid
         && request.resource.data.tipo == resource.data.tipo
         && request.resource.data.email == resource.data.email
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'nome','cpf','telefone','telefoneDigitos','bloco','apartamento','atualizadoEm',
+          'mostrarCodigoCondominio','condominioId','condominioNome','condominioCodigo',
+          'vinculoSolicitacaoId','vinculadoEm'
+        ])
+        && request.resource.data.nome is string
+        && request.resource.data.nome.size() > 0
+        && request.resource.data.nome.size() <= 120
+        && request.resource.data.get('cpf', '') is string
+        && request.resource.data.get('cpf', '').size() <= 11
+        && request.resource.data.get('telefoneDigitos', '') is string
+        && request.resource.data.get('telefoneDigitos', '').size() <= 11
+        && request.resource.data.get('bloco', '') is string
+        && request.resource.data.get('bloco', '').size() <= 30
+        && request.resource.data.get('apartamento', '') is string
+        && request.resource.data.get('apartamento', '').size() <= 30
         && (
-          request.resource.data.condominioId == resource.data.get('condominioId', '') ||
+          (
+            request.resource.data.condominioId == resource.data.get('condominioId', '')
+            && request.resource.data.get('condominioNome', '') == resource.data.get('condominioNome', '')
+            && request.resource.data.get('condominioCodigo', '') == resource.data.get('condominioCodigo', '')
+          ) ||
           (
             resource.data.tipo in ['morador', 'porteiro']
             && resource.data.get('condominioId', '') == ''
@@ -202,8 +270,16 @@ service cloud.firestore {
             && request.resource.data.condominioId.size() == 7
             && exists(/databases/$(database)/documents/condominios/$(request.resource.data.condominioId))
             && solicitacaoAprovadaPara(request.resource.data.condominioId, request.resource.data.get('vinculoSolicitacaoId', ''))
+            && request.resource.data.get('condominioNome', '') == get(/databases/$(database)/documents/solicitacoesCondominio/$(request.resource.data.vinculoSolicitacaoId)).data.condominioNome
+            && request.resource.data.get('condominioCodigo', '') == get(/databases/$(database)/documents/solicitacoesCondominio/$(request.resource.data.vinculoSolicitacaoId)).data.condominioCodigo
           )
         );
+      allow delete: if false;
+    }
+
+    match /diretorioUsuarios/{uid} {
+      allow read: if logado() && mesmoCondominio(resource.data.get('condominioId', ''));
+      allow create, update: if diretorioValido(uid);
       allow delete: if false;
     }
 
@@ -212,12 +288,24 @@ service cloud.firestore {
     }
 
     match /pushDispositivos/{id} {
-      allow create, update: if logado()
+      allow create: if logado()
+        && request.resource.data.keys().hasOnly(['uid','tipo','condominioId','token','plataforma','ativo','atualizadoEm'])
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.tipo == perfil().tipo
         && request.resource.data.condominioId == perfil().get('condominioId', '')
         && request.resource.data.token is string
-        && request.resource.data.token.size() > 10
+        && request.resource.data.token.size() > 20
+        && request.resource.data.token.size() <= 300
+        && request.resource.data.plataforma in ['android', 'ios']
+        && request.resource.data.ativo == true;
+      allow update: if logado()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid','tipo','condominioId','token','plataforma','ativo','atualizadoEm'])
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.tipo == perfil().tipo
+        && request.resource.data.condominioId == perfil().get('condominioId', '')
+        && request.resource.data.token is string
+        && request.resource.data.token.size() > 20
         && request.resource.data.token.size() <= 300
         && request.resource.data.plataforma in ['android', 'ios']
         && request.resource.data.ativo == true;
@@ -234,25 +322,52 @@ service cloud.firestore {
         && request.resource.data.get('solicitanteTipo', 'morador') == perfil().tipo
         && request.resource.data.condominioId is string
         && request.resource.data.condominioId.size() == 7
-        && exists(/databases/$(database)/documents/condominios/$(request.resource.data.condominioId));
+        && id == request.auth.uid + '_' + request.resource.data.condominioId
+        && exists(/databases/$(database)/documents/condominios/$(request.resource.data.condominioId))
+        && request.resource.data.moradorNome == perfil().get('nome', '')
+        && request.resource.data.email == perfil().get('email', '')
+        && request.resource.data.get('bloco', '') == perfil().get('bloco', '')
+        && request.resource.data.get('apartamento', '') == perfil().get('apartamento', '')
+        && request.resource.data.condominioNome == get(/databases/$(database)/documents/condominios/$(request.resource.data.condominioId)).data.nome
+        && request.resource.data.condominioCodigo == get(/databases/$(database)/documents/condominios/$(request.resource.data.condominioId)).data.get('codigoExibicao', '');
       allow read: if logado() && (
-        resource.data.moradorId == request.auth.uid || mesmoCondominio(resource.data.condominioId)
+        resource.data.moradorId == request.auth.uid ||
+        (porteiro() && mesmoCondominio(resource.data.condominioId))
       );
       allow update: if logado() && (
-        (porteiro()
+        (
+          porteiro()
           && mesmoCondominio(resource.data.condominioId)
           && resource.data.status == 'pendente'
           && request.resource.data.status in ['aprovada', 'rejeitada']
           && request.resource.data.moradorId == resource.data.moradorId
-          && request.resource.data.condominioId == resource.data.condominioId) ||
-        (logado()
-          && perfil().tipo == resource.data.get('solicitanteTipo', 'morador')
+          && request.resource.data.condominioId == resource.data.condominioId
+          && request.resource.data.get('solicitanteTipo', 'morador') == resource.data.get('solicitanteTipo', 'morador')
+          && request.resource.data.decididoPorId == request.auth.uid
+          && request.resource.data.decididoPorNome == perfil().get('nome', '')
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','decididoPorId','decididoPorNome','decididoEm','atualizadoEm'])
+        )
+        ||
+        (
+          perfil().tipo == resource.data.get('solicitanteTipo', 'morador')
           && resource.data.moradorId == request.auth.uid
           && request.resource.data.moradorId == resource.data.moradorId
           && request.resource.data.condominioId == resource.data.condominioId
           && request.resource.data.get('solicitanteTipo', 'morador') == resource.data.get('solicitanteTipo', 'morador')
-          && ((resource.data.status in ['pendente', 'rejeitada'] && request.resource.data.status == 'pendente') ||
-              (resource.data.status == 'aprovada' && request.resource.data.status == 'concluida')))
+          && (
+            (
+              resource.data.status in ['pendente', 'rejeitada']
+              && request.resource.data.status == 'pendente'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','atualizadoEm'])
+            )
+            ||
+            (
+              resource.data.status == 'aprovada'
+              && request.resource.data.status == 'concluida'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','concluidaEm','atualizadoEm'])
+            )
+          )
+        )
       );
       allow delete: if false;
     }
@@ -260,14 +375,37 @@ service cloud.firestore {
     match /encomendas/{id} {
       allow create: if porteiro()
         && mesmoCondominio(request.resource.data.condominioId)
-        && request.resource.data.porteiroId == request.auth.uid;
+        && request.resource.data.porteiroId == request.auth.uid
+        && request.resource.data.moradorId is string
+        && moradorNoCondominio(request.resource.data.moradorId, request.resource.data.condominioId)
+        && request.resource.data.status == 'pendente'
+        && request.resource.data.codigoRetirada is string
+        && request.resource.data.codigoRetirada.matches('^[0-9]{6}$')
+        && request.resource.data.codigoReferencia is string
+        && request.resource.data.codigoReferencia.size() > 0
+        && request.resource.data.descricao is string
+        && request.resource.data.descricao.size() <= 300;
       allow update: if porteiro()
         && mesmoCondominio(resource.data.condominioId)
-        && request.resource.data.condominioId == resource.data.condominioId;
-      allow delete: if porteiro() && mesmoCondominio(resource.data.condominioId);
+        && request.resource.data.condominioId == resource.data.condominioId
+        && request.resource.data.moradorId == resource.data.moradorId
+        && request.resource.data.porteiroId == resource.data.porteiroId
+        && request.resource.data.codigoRetirada == resource.data.codigoRetirada
+        && request.resource.data.codigoReferencia == resource.data.codigoReferencia
+        && request.resource.data.recebidaEm == resource.data.recebidaEm
+        && request.resource.data.origem == resource.data.origem
+        && request.resource.data.descricao == resource.data.descricao
+        && request.resource.data.status in ['pendente','retirada']
+        && !(resource.data.status == 'retirada' && request.resource.data.status != 'retirada')
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'moradorNotificadoEm','historico','lembrete3dEnviado','status','retiradaEm',
+          'retiradaPorId','retiradaPorNome','retiradaRecebedorNome','codigoRetiradaConfirmado'
+        ])
+        && (request.resource.data.status != 'retirada' || request.resource.data.retiradaPorId == request.auth.uid);
+      allow delete: if false;
       allow read: if logado() && (
         (porteiro() && mesmoCondominio(resource.data.condominioId)) ||
-        (morador() && resource.data.moradorId == request.auth.uid)
+        (morador() && resource.data.moradorId == request.auth.uid && mesmoCondominio(resource.data.condominioId))
       );
     }
 
@@ -314,7 +452,10 @@ service cloud.firestore {
     }
 
     match /fotosEncomendas/{id} {
-      allow create: if porteiro() && mesmoCondominio(request.resource.data.condominioId);
+      allow create: if porteiro()
+        && mesmoCondominio(request.resource.data.condominioId)
+        && request.resource.data.moradorId is string
+        && moradorNoCondominio(request.resource.data.moradorId, request.resource.data.condominioId);
       allow read: if logado() && (
         (porteiro() && mesmoCondominio(resource.data.condominioId)) ||
         (morador() && resource.data.moradorId == request.auth.uid)
@@ -327,7 +468,17 @@ service cloud.firestore {
         && request.resource.data.moradorId == request.auth.uid
         && request.resource.data.condominioId is string
         && request.resource.data.condominioId.size() > 0
-        && mesmoCondominio(request.resource.data.condominioId);
+        && mesmoCondominio(request.resource.data.condominioId)
+        && request.resource.data.descricao is string
+        && request.resource.data.descricao.size() > 0
+        && request.resource.data.descricao.size() <= 300
+        && request.resource.data.get('codigoRastreio', '') is string
+        && request.resource.data.get('codigoRastreio', '').size() <= 150
+        && request.resource.data.get('transportadora', '') is string
+        && request.resource.data.get('transportadora', '').size() <= 120
+        && request.resource.data.get('previsao', '') is string
+        && request.resource.data.get('previsao', '').size() <= 120
+        && request.resource.data.get('atrasada', false) is bool;
       allow read: if logado() && (
         resource.data.moradorId == request.auth.uid ||
         (porteiro() && mesmoCondominio(resource.data.condominioId))
@@ -335,7 +486,18 @@ service cloud.firestore {
       allow update: if morador()
         && resource.data.moradorId == request.auth.uid
         && request.resource.data.moradorId == resource.data.moradorId
-        && request.resource.data.condominioId == resource.data.condominioId;
+        && request.resource.data.condominioId == resource.data.condominioId
+        && request.resource.data.descricao is string
+        && request.resource.data.descricao.size() > 0
+        && request.resource.data.descricao.size() <= 300
+        && request.resource.data.get('codigoRastreio', '') is string
+        && request.resource.data.get('codigoRastreio', '').size() <= 150
+        && request.resource.data.get('transportadora', '') is string
+        && request.resource.data.get('transportadora', '').size() <= 120
+        && request.resource.data.get('previsao', '') is string
+        && request.resource.data.get('previsao', '').size() <= 120
+        && request.resource.data.get('atrasada', false) is bool
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['descricao','codigoRastreio','transportadora','previsao','atrasada','atualizadoEm']);
       allow delete: if morador() && resource.data.moradorId == request.auth.uid;
     }
 
@@ -397,11 +559,7 @@ service cloud.firestore {
         && request.resource.data.porteiroId == request.auth.uid
         && mesmoCondominio(request.resource.data.condominioId);
       allow read: if porteiro() && mesmoCondominio(resource.data.condominioId);
-      allow update: if porteiro()
-        && mesmoCondominio(resource.data.condominioId)
-        && request.resource.data.condominioId == resource.data.condominioId
-        && request.resource.data.porteiroId == resource.data.porteiroId;
-      allow delete: if false;
+      allow update, delete: if false;
     }
 
     match /ocrTestes/{id} {

@@ -2,9 +2,8 @@
 
 # dependencies
 node_modules/
-# O setup usa npm install e o EAS está com lockfile não congelado. O lock local
-# não é versionado para evitar que um lock antigo impeça novas libs nativas.
-package-lock.json
+# package-lock.json é versionado para instalações reproduzíveis e para impedir
+# que versões transitivas mudem silenciosamente entre validação e build.
 
 # Expo
 .expo/

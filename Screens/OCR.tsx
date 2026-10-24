@@ -238,7 +238,7 @@ export default function OCR({ navigation }: any) {
 
     <View style={styles.privacyCard}>
       <Ionicons name="shield-checkmark-outline" size={19} color={colors.success}/>
-      <Text style={styles.privacyText}>A foto não é salva no Firestore nem anexada à encomenda. Ela fica apenas temporariamente nesta tela e pode ser removida logo após a leitura. O texto bruto também não é persistido.</Text>
+      <Text style={styles.privacyText}>A foto não é salva no Firestore nem anexada à encomenda, mas uma cópia comprimida é enviada por HTTPS ao serviço externo OCR.Space para realizar o reconhecimento. O texto bruto retornado não é persistido pelo Cegonha. Evite fotografar áreas da etiqueta que não sejam necessárias para identificar a encomenda.</Text>
     </View>
 
     {chaveDemo && <View style={styles.demoCard}>

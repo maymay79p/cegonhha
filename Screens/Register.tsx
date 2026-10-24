@@ -140,7 +140,8 @@ export default function Register({ route, navigation }: any) {
     if (!validarCPF(cpf)) return setErroFormulario('Informe um CPF válido no formato 000.000.000-00.'), false;
     if (!validarTelefoneBR(telefone)) return setErroFormulario('Informe um telefone brasileiro válido com DDD.'), false;
     if (!cadastroAutenticado && (!email.trim() || !senha)) return setErroFormulario('Informe e-mail e senha.'), false;
-    if (!cadastroAutenticado && senha.length < 6) return setErroFormulario('A senha deve ter pelo menos 6 caracteres.'), false;
+    if (!cadastroAutenticado && senha.length < 8) return setErroFormulario('A senha deve ter pelo menos 8 caracteres.'), false;
+    if (!cadastroAutenticado && (!/[A-Za-z]/.test(senha) || !/\d/.test(senha))) return setErroFormulario('Use uma senha com pelo menos uma letra e um número.'), false;
     if (tipo === 'morador' && (!bloco.trim() || !apartamento.trim())) return setErroFormulario('Informe bloco e apartamento.'), false;
     if (tipo === 'porteiro' && modoPorteiro === 'criar' && nomeCondominio.trim().length < 3) return setErroFormulario('Informe o nome do condomínio.'), false;
     if (precisaCodigoPorteiro && !codigoCondominio.trim()) return setErroFormulario('Informe o código do condomínio em que você trabalha.'), false;

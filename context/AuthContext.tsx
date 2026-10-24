@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
-import { sincronizarIdentificadoresExistentes } from '../services/identificadoresUsuarios';
+import { sincronizarDiretorioUsuario, sincronizarIdentificadoresExistentes } from '../services/identificadoresUsuarios';
 import { registrarDispositivoPush } from '../services/pushNotifications';
 
 export type PerfilUsuario = {
@@ -31,18 +31,15 @@ type AuthContextType = {
 };
 
 const AuthContext = createContext<AuthContextType>({ user: null, perfil: null, loading: true, recarregarPerfil: async () => {}, aplicarPerfilLocal: async () => {} });
-const CACHE_PREFIX = '@cegonha/perfil:';
+const LEGACY_CACHE_PREFIX = '@cegonha/perfil:';
 
-export function chaveCachePerfil(uid: string) { return `${CACHE_PREFIX}${uid}`; }
-export async function salvarPerfilNoCache(perfil: PerfilUsuario) { await AsyncStorage.setItem(chaveCachePerfil(perfil.id), JSON.stringify(perfil)); }
-export async function lerPerfilDoCache(uid: string): Promise<PerfilUsuario | null> {
-  try {
-    const valor = await AsyncStorage.getItem(chaveCachePerfil(uid));
-    if (!valor) return null;
-    const dados = JSON.parse(valor);
-    if (!dados?.id || !dados?.tipo) return null;
-    return dados as PerfilUsuario;
-  } catch { return null; }
+function chaveCacheLegado(uid: string) {
+  return `${LEGACY_CACHE_PREFIX}${uid}`;
+}
+
+async function apagarCacheSensivelLegado(uid: string) {
+  if (!uid) return;
+  await AsyncStorage.removeItem(chaveCacheLegado(uid));
 }
 
 function precisaConfirmarEmail(user: User) {
@@ -60,7 +57,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     perfilRef.current = dados;
     setPerfil(dados);
     setLoading(false);
-    salvarPerfilNoCache(dados).catch(() => {});
+    // Versões antigas armazenavam CPF, telefone, e-mail e unidade em AsyncStorage.
+    // O perfil completo agora vive somente em memória e no Firestore protegido.
+    apagarCacheSensivelLegado(dados.id).catch(() => {});
   }
 
   async function recarregarPerfil() {
@@ -90,35 +89,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribeAuth = onAuthStateChanged(auth, currentUser => {
       versao += 1;
       const versaoAtual = versao;
+      const perfilAnteriorId = perfilRef.current?.id || '';
       setUser(currentUser);
       if (unsubscribePerfil) unsubscribePerfil();
       if (timerPerfilAusente) clearTimeout(timerPerfilAusente);
 
       if (!currentUser) {
+        if (perfilAnteriorId) apagarCacheSensivelLegado(perfilAnteriorId).catch(() => {});
         perfilRef.current = null;
         setPerfil(null);
         setLoading(false);
         return;
       }
+
+      apagarCacheSensivelLegado(currentUser.uid).catch(() => {});
 
       if (precisaConfirmarEmail(currentUser)) {
         perfilRef.current = null;
         setPerfil(null);
         setLoading(false);
-        AsyncStorage.removeItem(chaveCachePerfil(currentUser.uid)).catch(() => {});
         return;
       }
 
       const jaTemPerfilAtual = perfilRef.current?.id === currentUser.uid;
       if (!jaTemPerfilAtual) setLoading(true);
-
-      lerPerfilDoCache(currentUser.uid).then(cache => {
-        if (versaoAtual !== versao || !cache) return;
-        if (perfilRef.current?.id === currentUser.uid) return;
-        perfilRef.current = cache;
-        setPerfil(cache);
-        setLoading(false);
-      });
 
       unsubscribePerfil = onSnapshot(
         doc(db, 'usuarios', currentUser.uid),
@@ -130,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             perfilRef.current = dados;
             setPerfil(dados);
             setLoading(false);
-            salvarPerfilNoCache(dados).catch(() => {});
+            apagarCacheSensivelLegado(dados.id).catch(() => {});
             garantirDestaqueCodigo(dados);
             return;
           }
@@ -139,7 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             perfilRef.current = null;
             setPerfil(null);
             setLoading(false);
-            AsyncStorage.removeItem(chaveCachePerfil(currentUser.uid)).catch(() => {});
+            apagarCacheSensivelLegado(currentUser.uid).catch(() => {});
           }, 5000);
         },
         () => { if (perfilRef.current?.id !== currentUser.uid) setLoading(false); }
@@ -162,7 +156,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       telefone:perfil.telefone,
       email:perfil.email,
     }).catch(() => {});
-  }, [user?.uid, user?.emailVerified, perfil?.id, perfil?.cpf, perfil?.telefone, perfil?.email]);
+    sincronizarDiretorioUsuario(perfil).catch(() => {});
+  }, [user?.uid, user?.emailVerified, perfil?.id, perfil?.nome, perfil?.tipo, perfil?.condominioId, perfil?.bloco, perfil?.apartamento, perfil?.cpf, perfil?.telefone, perfil?.email]);
 
   useEffect(() => {
     if (!user || !perfil || user.uid !== perfil.id || precisaConfirmarEmail(user)) return;

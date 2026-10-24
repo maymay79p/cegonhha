@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
-import { lerPerfilDoCache, PerfilUsuario, useAuth } from '../context/AuthContext';
+import { PerfilUsuario, useAuth } from '../context/AuthContext';
 import { useFeedback } from '../context/FeedbackContext';
 import { useTheme } from '../context/ThemeContext';
 import { AppText as Text, AppTextInput as TextInput } from '../components/AppText';
@@ -24,8 +24,6 @@ export default function Login({ navigation }: any) {
   const [erroLogin, setErroLogin] = useState('');
 
   const obterPerfil = useCallback(async (uid: string): Promise<PerfilUsuario | null> => {
-    const cache = await lerPerfilDoCache(uid);
-    if (cache) return cache;
     const snapshot = await getDoc(doc(db, 'usuarios', uid));
     if (!snapshot.exists()) return null;
     return { id: snapshot.id, ...snapshot.data() } as PerfilUsuario;
@@ -34,8 +32,6 @@ export default function Login({ navigation }: any) {
   const validarEAbrirArea = useCallback(async (uid: string) => {
     const dados = await obterPerfil(uid);
     if (!dados) {
-      // Mantém a autenticação: o navegador raiz encaminha para Register, onde
-      // uma conta ainda sem perfil pode concluir a confirmação/cadastro.
       feedback.notify('Complete as etapas pendentes para entrar no Cegonha.', { title:'Cadastro ainda não concluído', tone:'info' });
       return false;
     }
@@ -57,9 +53,6 @@ export default function Login({ navigation }: any) {
       const cred = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), senha);
       const usaSenha = cred.user.providerData.some(p => p.providerId === 'password');
       if (usaSenha && !cred.user.emailVerified) {
-        // AuthContext não carrega o perfil enquanto o e-mail não estiver
-        // confirmado. O usuário segue autenticado e é levado para a etapa de
-        // confirmação, onde também pode reenviar o e-mail.
         feedback.notify('Confirme o endereço de e-mail para concluir o cadastro.', { title:'Confirmação pendente', tone:'info' });
         return;
       }
@@ -67,7 +60,7 @@ export default function Login({ navigation }: any) {
     } catch (e:any) {
       const codigo = String(e?.code || '');
       if (codigo.includes('invalid-credential') || codigo.includes('wrong-password') || codigo.includes('user-not-found')) setErroLogin('E-mail ou senha incorretos.');
-      else feedback.alert('Não foi possível entrar', e?.message || 'Tente novamente em instantes.', undefined, 'danger');
+      else feedback.alert('Não foi possível entrar', 'Não foi possível concluir o acesso. Tente novamente em instantes.', undefined, 'danger');
     } finally { setLoading(false); }
   }
 

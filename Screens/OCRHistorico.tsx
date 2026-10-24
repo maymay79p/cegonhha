@@ -34,7 +34,6 @@ export default function OCRHistorico({ navigation }: any) {
   const exibidos = useMemo(() => {
     return itens.filter(item => correspondeBusca(normalizarBusca([
       item.nomeDetectado,
-      item.cpfDetectado,
       item.moradorConfirmadoNome,
       item.porteiroNome,
       item.blocoDetectado,
@@ -48,16 +47,16 @@ export default function OCRHistorico({ navigation }: any) {
 
   return <View style={styles.container}>
     <View style={styles.header}><TouchableOpacity style={styles.back} onPress={() => navigation.goBack()} accessibilityLabel="Voltar"><Ionicons name="arrow-back" size={21} color={colors.text} /></TouchableOpacity><View style={{ flex: 1 }}><Text style={styles.eyebrow}>PORTARIA</Text><Text style={styles.title}>Histórico do OCR</Text></View></View>
-    <Text style={styles.privacy}>Somente leituras usadas para confirmar uma encomenda aparecem aqui. Fotos e texto bruto das etiquetas não são armazenados.</Text>
-    <View style={styles.search}><Ionicons name="search-outline" size={19} color={colors.muted} /><TextInput style={styles.searchInput} placeholder="Nome, CPF, bloco ou apartamento" value={busca} onChangeText={setBusca} />{!!busca&&<TouchableOpacity onPress={()=>setBusca('')} accessibilityLabel="Limpar busca"><Ionicons name="close-circle" size={19} color={colors.muted}/></TouchableOpacity>}</View>
+    <Text style={styles.privacy}>Somente metadados mínimos de leituras usadas para confirmar uma encomenda aparecem aqui. Fotos, texto bruto e o número do CPF reconhecido não são armazenados.</Text>
+    <View style={styles.search}><Ionicons name="search-outline" size={19} color={colors.muted} /><TextInput style={styles.searchInput} placeholder="Nome, bloco ou apartamento" value={busca} onChangeText={setBusca} />{!!busca&&<TouchableOpacity onPress={()=>setBusca('')} accessibilityLabel="Limpar busca"><Ionicons name="close-circle" size={19} color={colors.muted}/></TouchableOpacity>}</View>
     {loading ? <LoadingCards /> : <FlatList
       data={exibidos}
       keyExtractor={item => item.id}
       contentContainerStyle={{ paddingTop: 12, paddingBottom: 40 }}
-      ListEmptyComponent={<EmptyState icon="scan-outline" title="Nenhuma leitura encontrada" text="Tente buscar por nome, CPF, bloco ou apartamento. Leituras confirmadas aparecerão aqui." />}
+      ListEmptyComponent={<EmptyState icon="scan-outline" title="Nenhuma leitura encontrada" text="Tente buscar por nome, bloco ou apartamento. Leituras confirmadas aparecerão aqui." />}
       renderItem={({ item }) => <View style={styles.card}>
         <View style={styles.top}><Text style={styles.name}>{item.nomeDetectado || 'Nome não identificado'}</Text><Text style={styles.score}>{Math.round((item.topScore || 0) * 100)}%</Text></View>
-        <Text style={styles.meta}>CPF: {item.cpfDetectado || '—'}</Text>
+        <Text style={styles.meta}>CPF reconhecido: {item.reconheceuCpf ? 'sim' : 'não'}</Text>
         <Text style={styles.meta}>Bloco {item.blocoDetectado || '—'} · Ap. {item.apartamentoDetectado || '—'}</Text>
         <View style={[styles.status,styles.statusOk]}><Ionicons name="checkmark-circle-outline" size={15} color={colors.success}/><Text style={[styles.statusText,{color:colors.success}]}>{`Confirmada para ${item.moradorConfirmadoNome || 'morador'}`}</Text></View>
         <Text style={styles.date}>{item.criadoEm?.toDate?.().toLocaleString('pt-BR') || ''}{item.porteiroNome ? ` · ${item.porteiroNome}` : ''}</Text>

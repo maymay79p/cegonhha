@@ -1,4 +1,5 @@
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import * as Crypto from 'expo-crypto';
 import { db } from '../firebase';
 
 const ALFABETO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -22,11 +23,11 @@ export function formatarCodigoCondominio(valor: string) {
 }
 
 export function gerarCodigoCondominioAleatorio() {
-  let codigo = '';
-  for (let i = 0; i < 7; i += 1) {
-    codigo += ALFABETO[Math.floor(Math.random() * ALFABETO.length)];
-  }
-  return codigo;
+  // O código funciona como segredo de convite. Como o alfabeto tem 32 símbolos,
+  // byte % 32 distribui os valores uniformemente sem viés de módulo.
+  const bytes = new Uint8Array(7);
+  Crypto.getRandomValues(bytes);
+  return Array.from(bytes, byte => ALFABETO[byte % ALFABETO.length]).join('');
 }
 
 export function prepararNovoCondominio(nome: string, criadorUid: string): Condominio {

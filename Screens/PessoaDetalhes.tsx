@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../firebase';
@@ -14,9 +14,24 @@ export default function PessoaDetalhes({route,navigation}:any){
   const {perfil}=useAuth();
   const {colors}=useTheme();
   const styles=useMemo(()=>makeStyles(colors),[colors]);
+  // O parâmetro de rota vem do diretório mínimo e nunca deve carregar CPF,
+  // telefone ou e-mail. A Portaria busca o perfil privado diretamente, sujeito
+  // às regras do Firestore, somente ao abrir esta tela.
   const pessoa=route.params?.pessoa||{};
+  const [dadosPrivados,setDadosPrivados]=useState<any>(null);
   const [encomendas,setEncomendas]=useState<any[]>([]);
   const [loading,setLoading]=useState(true);
+
+  useEffect(()=>{
+    if(perfil?.tipo!=='porteiro'||!perfil.condominioId||!pessoa.id){
+      setDadosPrivados(null);return;
+    }
+    return onSnapshot(doc(db,'usuarios',pessoa.id),snap=>{
+      if(!snap.exists()){setDadosPrivados(null);return;}
+      const dados={id:snap.id,...snap.data()} as any;
+      setDadosPrivados(dados.condominioId===perfil.condominioId?dados:null);
+    },()=>setDadosPrivados(null));
+  },[perfil?.tipo,perfil?.condominioId,pessoa.id]);
 
   useEffect(()=>{
     if(perfil?.tipo!=='porteiro'||!perfil.condominioId||pessoa.tipo!=='morador'){
@@ -50,10 +65,10 @@ export default function PessoaDetalhes({route,navigation}:any){
 
       <View style={styles.card}>
         <Text style={styles.cardLabel}>DADOS ESSENCIAIS</Text>
-        <View style={styles.infoRow}><Ionicons name="mail-outline" size={18} color={colors.muted}/><View><Text style={styles.infoLabel}>E-mail</Text><Text style={styles.infoValue}>{pessoa.email||'Não informado'}</Text></View></View>
-        {!!pessoa.telefone&&<View style={styles.infoRow}><Ionicons name="call-outline" size={18} color={colors.muted}/><View><Text style={styles.infoLabel}>Telefone</Text><Text style={styles.infoValue}>{pessoa.telefone}</Text></View></View>}
+        <View style={styles.infoRow}><Ionicons name="mail-outline" size={18} color={colors.muted}/><View><Text style={styles.infoLabel}>E-mail</Text><Text style={styles.infoValue}>{dadosPrivados?.email||'Não informado'}</Text></View></View>
+        {!!dadosPrivados?.telefone&&<View style={styles.infoRow}><Ionicons name="call-outline" size={18} color={colors.muted}/><View><Text style={styles.infoLabel}>Telefone</Text><Text style={styles.infoValue}>{dadosPrivados.telefone}</Text></View></View>}
         {pessoa.tipo==='morador'&&<View style={styles.infoRow}><Ionicons name="home-outline" size={18} color={colors.muted}/><View><Text style={styles.infoLabel}>Unidade</Text><Text style={styles.infoValue}>Bloco {pessoa.bloco||'—'} · Apartamento {pessoa.apartamento||'—'}</Text></View></View>}
-        <Text style={styles.privacy}>A Portaria visualiza apenas informações úteis à operação do condomínio. CPF não é exibido nesta tela.</Text>
+        <Text style={styles.privacy}>Os dados pessoais são carregados somente para a Portaria autorizada do mesmo condomínio. CPF não é exibido nesta tela.</Text>
       </View>
 
       {pessoa.tipo==='morador'&&<>

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, StyleSheet, TouchableOpacity, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { doc, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { deleteField, doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -15,32 +15,56 @@ export default function Condominio({ navigation }: any) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [dados, setDados] = useState<any>(null);
+  const [detalhes, setDetalhes] = useState<any>(null);
   const [endereco, setEndereco] = useState('');
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
     if (!perfil?.condominioId) return;
-    return onSnapshot(doc(db, 'condominios', perfil.condominioId), snap => {
+    const condominioRef = doc(db, 'condominios', perfil.condominioId);
+    const detalhesRef = doc(db, 'condominioDetalhes', perfil.condominioId);
+
+    const unsubCondominio = onSnapshot(condominioRef, snap => {
       const valor:any = snap.exists() ? { id:snap.id, ...snap.data() } : null;
       setDados(valor);
-      setEndereco(String(valor?.endereco || ''));
+
+      // Migração segura de versões antigas: o endereço já salvo no documento
+      // público é movido para a área privada e removido do documento de convite.
+      const enderecoLegado = String(valor?.endereco || '').trim();
+      if (perfil.tipo === 'porteiro' && enderecoLegado) {
+        setDoc(detalhesRef, { endereco:enderecoLegado, atualizadoEm:serverTimestamp() }, { merge:true })
+          .then(() => updateDoc(condominioRef, { endereco:deleteField(), atualizadoEm:serverTimestamp() }))
+          .catch(() => {});
+      }
     });
-  }, [perfil?.condominioId]);
+
+    const unsubDetalhes = onSnapshot(detalhesRef, snap => {
+      const valor:any = snap.exists() ? { id:snap.id, ...snap.data() } : null;
+      setDetalhes(valor);
+      setEndereco(String(valor?.endereco || ''));
+    }, () => {
+      setDetalhes(null);
+      setEndereco('');
+    });
+
+    return () => { unsubCondominio(); unsubDetalhes(); };
+  }, [perfil?.condominioId, perfil?.tipo]);
 
   async function salvarEndereco() {
     if (perfil?.tipo !== 'porteiro' || !perfil.condominioId) return;
     if (endereco.trim().length < 5) return Alert.alert('Localização', 'Informe um endereço válido do condomínio.');
+    if (endereco.trim().length > 300) return Alert.alert('Localização', 'O endereço deve ter no máximo 300 caracteres.');
     try {
       setSalvando(true);
-      await updateDoc(doc(db, 'condominios', perfil.condominioId), { endereco: endereco.trim(), atualizadoEm: serverTimestamp() });
-      Alert.alert('Localização salva', 'O endereço do condomínio foi atualizado para todos os usuários.');
+      await setDoc(doc(db, 'condominioDetalhes', perfil.condominioId), { endereco: endereco.trim(), atualizadoEm: serverTimestamp() }, { merge:true });
+      Alert.alert('Localização salva', 'O endereço do condomínio foi atualizado para os usuários vinculados.');
     } catch (e:any) {
-      Alert.alert('Localização', e?.message || 'Não foi possível salvar o endereço.');
+      Alert.alert('Localização', 'Não foi possível salvar o endereço. Confira sua conexão e tente novamente.');
     } finally { setSalvando(false); }
   }
 
   async function abrirMapa() {
-    const valor = String(dados?.endereco || endereco || '').trim();
+    const valor = String(detalhes?.endereco || endereco || '').trim();
     if (!valor) return Alert.alert('Mapa', 'A portaria ainda não cadastrou a localização do condomínio.');
     const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(valor)}`;
     const ok = await Linking.canOpenURL(url);
@@ -61,7 +85,7 @@ export default function Condominio({ navigation }: any) {
     <View style={styles.header}><TouchableOpacity style={styles.back} onPress={()=>navigation.goBack()}><Ionicons name="arrow-back" size={21} color={colors.text}/></TouchableOpacity><View><Text style={styles.eyebrow}>CONDOMÍNIO</Text><Text style={styles.title}>{perfil.condominioNome || dados?.nome || 'Condomínio'}</Text></View></View>
     <View style={styles.card}>
       <Text style={styles.label}>CÓDIGO DE ACESSO</Text>
-      <Text style={styles.code}>{perfil.condominioCodigo || dados?.codigoExibicao || '—'}</Text>
+      <Text style={styles.code}>{perfil?.condominioCodigo || dados?.codigoExibicao || '—'}</Text>
       <TouchableOpacity style={styles.copy} onPress={copiarCodigo}><Ionicons name="copy-outline" size={18} color={colors.porter}/><Text style={styles.copyText}>Copiar código</Text></TouchableOpacity>
     </View>
 
@@ -74,10 +98,10 @@ export default function Condominio({ navigation }: any) {
     <View style={styles.card}>
       <Text style={styles.label}>LOCALIZAÇÃO</Text>
       {perfil.tipo === 'porteiro' ? <>
-        <Text style={styles.muted}>Cadastre o endereço completo. Moradores e portaria poderão abri-lo diretamente no mapa.</Text>
-        <TextInput style={styles.input} placeholder="Rua, número, bairro, cidade" value={endereco} onChangeText={setEndereco} />
+        <Text style={styles.muted}>Cadastre o endereço completo. Ele fica disponível apenas para contas vinculadas ao condomínio.</Text>
+        <TextInput style={styles.input} placeholder="Rua, número, bairro, cidade" value={endereco} onChangeText={setEndereco} maxLength={300} />
         <TouchableOpacity style={[styles.primary,salvando&&{opacity:.55}]} onPress={salvarEndereco} disabled={salvando}><Text style={styles.primaryText}>{salvando?'Salvando...':'Salvar localização'}</Text></TouchableOpacity>
-      </> : <Text style={styles.address}>{dados?.endereco || 'A portaria ainda não cadastrou o endereço.'}</Text>}
+      </> : <Text style={styles.address}>{detalhes?.endereco || 'A portaria ainda não cadastrou o endereço.'}</Text>}
       <TouchableOpacity style={styles.mapButton} onPress={abrirMapa}><Ionicons name="map-outline" size={19} color={colors.info}/><Text style={styles.mapText}>Abrir no mapa</Text></TouchableOpacity>
     </View>
   </KeyboardScreen>;

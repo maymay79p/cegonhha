@@ -18,15 +18,22 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22.13.1
+          cache: npm
 
       - name: Configurar Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
 
-      - name: Instalar dependências do app
-        run: npm install --no-audit --no-fund
+      - name: Instalar dependências reproduzíveis do app
+        run: npm ci --no-audit --no-fund
+
+      - name: Bloquear vulnerabilidades críticas no app
+        run: npm audit --omit=dev --audit-level=critical
+
+      - name: Confirmar versão corrigida do gRPC
+        run: npm ls @grpc/grpc-js
 
       - name: Conferir versões esperadas pelo Expo
         run: npx expo install --check
@@ -52,8 +59,20 @@ jobs:
       - name: Validar prebuild Android dos recursos nativos opcionais
         run: npx expo prebuild --platform android --clean --no-install
 
-      - name: Instalar dependências das Functions
-        run: npm install --prefix functions --no-audit --no-fund
+      - name: Instalar dependências reproduzíveis das Functions
+        run: npm ci --prefix functions --no-audit --no-fund
+
+      - name: Auditar dependências das Functions
+        run: npm audit --prefix functions --omit=dev --audit-level=high
 
       - name: Testar push notifications
         run: npm test --prefix functions
+
+      - name: Procurar assinaturas de credenciais privadas no estado atual
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git grep -nE 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|private_key|client_secret' -- ':!*.md' ':!.env.example' ':!.github/workflows/validate.yml'; then
+            echo 'Possível credencial privada versionada.'
+            exit 1
+          fi

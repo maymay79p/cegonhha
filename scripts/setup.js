@@ -23,8 +23,8 @@ console.log(`[1/4] Node ${process.version} OK`);
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 
-console.log('[2/4] Instalando/ajustando dependências...\n');
-executar(npm, ['install', '--no-audit', '--no-fund']);
+console.log('[2/4] Instalando dependências exatamente como validadas no lockfile...\n');
+executar(npm, ['ci', '--no-audit', '--no-fund']);
 
 console.log('\n[3/4] Conferindo compatibilidade das versões com o Expo...\n');
 executar(npx, ['expo', 'install', '--check']);

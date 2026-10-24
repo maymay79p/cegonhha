@@ -32,7 +32,9 @@ export default function PessoasCondominio({ navigation }: any) {
     }
 
     setLoading(true);
-    const q = query(collection(db, 'usuarios'), where('condominioId', '==', perfil.condominioId));
+    // O diretório contém somente os dados mínimos necessários para identificação
+    // dentro do condomínio. CPF, telefone e e-mail permanecem no perfil privado.
+    const q = query(collection(db, 'diretorioUsuarios'), where('condominioId', '==', perfil.condominioId));
     return onSnapshot(q, snap => {
       const lista = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       lista.sort((a, b) => {
@@ -44,7 +46,7 @@ export default function PessoasCondominio({ navigation }: any) {
     }, (e: any) => {
       setLoading(false);
       const codigo = String(e?.code || '');
-      Alert.alert('Pessoas do condomínio',codigo.includes('permission-denied')?'O Firestore bloqueou a lista de usuários. Publique as regras mais recentes do Cegonha.':'Não foi possível carregar as pessoas vinculadas ao condomínio.');
+      Alert.alert('Pessoas do condomínio',codigo.includes('permission-denied')?'O Firestore bloqueou o diretório. Publique as regras mais recentes do Cegonha.':'Não foi possível carregar as pessoas vinculadas ao condomínio.');
     });
   }, [perfil?.condominioId]);
 

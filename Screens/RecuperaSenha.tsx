@@ -19,9 +19,14 @@ export default function RecuperaSenha({ navigation }: any){
     try{
       setLoading(true);
       await sendPasswordResetEmail(auth,email.trim().toLowerCase());
-      Alert.alert('Pronto','E-mail de recuperação enviado.');
+      Alert.alert('Pronto','Se existir uma conta com esse e-mail, você receberá as instruções de recuperação.');
     } catch(e:any){
-      Alert.alert('Erro',e?.message || 'Não foi possível enviar o e-mail.');
+      const codigo=String(e?.code||'');
+      if(codigo.includes('too-many-requests')||codigo.includes('network-request-failed')){
+        Alert.alert('Não foi possível processar','Tente novamente mais tarde ou confira sua conexão.');
+      }else{
+        Alert.alert('Pronto','Se existir uma conta com esse e-mail, você receberá as instruções de recuperação.');
+      }
     } finally { setLoading(false); }
   }
 

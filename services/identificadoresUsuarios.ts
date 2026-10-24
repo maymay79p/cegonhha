@@ -1,5 +1,5 @@
 import * as Crypto from 'expo-crypto';
-import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { doc, runTransaction, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { somenteDigitos } from '../utils/validacao';
 
@@ -9,6 +9,15 @@ type DadosCondominio = {
   id: string;
   nome: string;
   codigoExibicao: string;
+};
+
+export type DadosDiretorioUsuario = {
+  uid: string;
+  nome: string;
+  tipo: 'morador' | 'porteiro';
+  condominioId: string;
+  bloco: string;
+  apartamento: string;
 };
 
 function normalizarCPF(valor: unknown) {
@@ -21,6 +30,21 @@ function normalizarTelefone(valor: unknown) {
 
 function normalizarEmail(valor: unknown) {
   return String(valor || '').trim().toLowerCase();
+}
+
+function textoCurto(valor: unknown, limite: number) {
+  return String(valor || '').trim().slice(0, limite);
+}
+
+function dadosDiretorio(uid: string, dados: DadosUsuario): DadosDiretorioUsuario {
+  return {
+    uid,
+    nome: textoCurto(dados?.nome, 120),
+    tipo: dados?.tipo === 'porteiro' ? 'porteiro' : 'morador',
+    condominioId: textoCurto(dados?.condominioId, 32),
+    bloco: dados?.tipo === 'morador' ? textoCurto(dados?.bloco, 30) : '',
+    apartamento: dados?.tipo === 'morador' ? textoCurto(dados?.apartamento, 30) : '',
+  };
 }
 
 async function idIdentificador(tipo: TipoIdentificador, valor: string) {
@@ -76,6 +100,13 @@ export async function salvarCadastroComIdentificadores(params: {
     refIdentificador('email', email),
   ]);
   const usuarioRef = doc(db, 'usuarios', params.uid);
+  const diretorioRef = doc(db, 'diretorioUsuarios', params.uid);
+  const dadosCompletos = {
+    ...params.dadosUsuario,
+    email,
+    cpf,
+    telefoneDigitos: telefone,
+  };
 
   try {
     await runTransaction(db, async transaction => {
@@ -109,11 +140,10 @@ export async function salvarCadastroComIdentificadores(params: {
         });
       }
 
-      transaction.set(usuarioRef, {
-        ...params.dadosUsuario,
-        email,
-        cpf,
-        telefoneDigitos: telefone,
+      transaction.set(usuarioRef, dadosCompletos);
+      transaction.set(diretorioRef, {
+        ...dadosDiretorio(params.uid, dadosCompletos),
+        atualizadoEm: serverTimestamp(),
       });
     });
   } catch (e: any) {
@@ -138,9 +168,20 @@ export async function atualizarPerfilComIdentificadores(params: {
   const novos = await refsPessoais(cpfNovo, telefoneNovo);
   const antigos = await refsPessoais(cpfAnterior || cpfNovo, telefoneAnterior || telefoneNovo);
   const usuarioRef = doc(db, 'usuarios', params.uid);
+  const diretorioRef = doc(db, 'diretorioUsuarios', params.uid);
 
   try {
     await runTransaction(db, async transaction => {
+      const usuarioSnap = await transaction.get(usuarioRef);
+      if (!usuarioSnap.exists()) throw new Error('Perfil não encontrado. Entre novamente e tente outra vez.');
+      const atual = usuarioSnap.data() || {};
+      const atualizados = {
+        ...atual,
+        ...params.dadosUsuario,
+        cpf: cpfNovo,
+        telefoneDigitos: telefoneNovo,
+      };
+
       transaction.set(novos.cpfRef, {
         uid: params.uid,
         tipo: 'cpf',
@@ -158,6 +199,10 @@ export async function atualizarPerfilComIdentificadores(params: {
         ...params.dadosUsuario,
         cpf: cpfNovo,
         telefoneDigitos: telefoneNovo,
+      });
+      transaction.set(diretorioRef, {
+        ...dadosDiretorio(params.uid, atualizados),
+        atualizadoEm: serverTimestamp(),
       });
 
       if (antigos.cpfId !== novos.cpfId) transaction.delete(antigos.cpfRef);
@@ -188,5 +233,14 @@ export async function sincronizarIdentificadoresExistentes(params: {
     transaction.set(cpfRef, { uid:params.uid, tipo:'cpf', chave:cpfId, atualizadoEm:serverTimestamp() });
     transaction.set(telefoneRef, { uid:params.uid, tipo:'telefone', chave:telefoneId, atualizadoEm:serverTimestamp() });
     transaction.set(emailIdentificador.ref, { uid:params.uid, tipo:'email', chave:emailIdentificador.id, atualizadoEm:serverTimestamp() });
+  });
+}
+
+export async function sincronizarDiretorioUsuario(params: DadosUsuario & { id?: string; uid?: string }) {
+  const uid = String(params.id || params.uid || '').trim();
+  if (!uid || !params.nome || !params.tipo) return;
+  await setDoc(doc(db, 'diretorioUsuarios', uid), {
+    ...dadosDiretorio(uid, params),
+    atualizadoEm: serverTimestamp(),
   });
 }
