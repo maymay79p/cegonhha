@@ -33,6 +33,9 @@ serviceAccountKey.json
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+firebase-debug*.log
+firestore-debug*.log
+ui-debug*.log
 
 # macOS
 .DS_Store
