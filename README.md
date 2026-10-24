@@ -46,7 +46,7 @@ O fluxo principal funciona no Expo Go. Google Sign-In nativo e push remoto exige
 
 ## Identidade visual
 
-A marca oficial é a cegonha rosa em estilo de impressão/carimbo. A identidade está integrada ao ícone instalado, splash, adaptive icon Android, favicon, login e onboarding. Os arquivos oficiais ficam em `assets/` e as regras de uso estão em [`docs/IDENTIDADE_VISUAL.md`](docs/IDENTIDADE_VISUAL.md).
+A marca oficial é a cegonha rosa em estilo de impressão/carimbo. A identidade está integrada ao ícone instalado, adaptive icon Android, favicon, login, onboarding e abertura nativa do Android. Os arquivos oficiais ficam em `assets/` e as regras de uso estão em [`docs/IDENTIDADE_VISUAL.md`](docs/IDENTIDADE_VISUAL.md).
 
 ## Segurança
 
@@ -117,21 +117,7 @@ O GitHub Actions também executa `expo prebuild` e compila uma APK Android debug
 
 ## Validação automática
 
-O workflow **Validar Cegonha** executa:
-
-- instalação reproduzível das dependências;
-- auditoria de vulnerabilidades;
-- conferência de versões do Expo;
-- TypeScript;
-- testes do parser OCR e pesquisas;
-- fluxo completo dos dois perfis com Firebase Auth/Firestore Emulator;
-- testes ofensivos das Firestore Rules;
-- Expo Doctor;
-- bundle do Expo Go;
-- prebuild Android;
-- compilação de APK debug;
-- testes do backend de push, lembrete e manutenção de conta;
-- busca por assinaturas comuns de credenciais privadas.
+O workflow **Validar Cegonha** executa instalação reproduzível, auditoria de vulnerabilidades, Expo/TypeScript, parser OCR, pesquisa, emuladores Firebase, testes ofensivos das regras, Expo Doctor, bundle Expo Go, prebuild Android, compilação de APK debug, testes das Functions e busca por assinaturas comuns de credenciais privadas.
 
 O teste de fluxo percorre cadastro/vínculo, chegada da encomenda, aviso, código de retirada, solicitação e confirmação da retirada.
 
