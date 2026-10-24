@@ -1,19 +1,30 @@
-# Cegonha
+# Cegonha 🐦
 
-Aplicativo de gerenciamento de encomendas para condomínios, desenvolvido com React Native, Expo, TypeScript e Firebase.
+Aplicativo de gerenciamento de encomendas para condomínios, desenvolvido como TCC com **React Native, Expo, TypeScript e Firebase**.
 
-## Perfis atuais
+O sistema possui dois perfis: **Morador** e **Portaria**. A comunicação é operacional pela Central de Avisos e coletiva pelo Mural; chat privado e perfil de síndico não fazem parte do escopo atual.
 
-- Morador
-- Portaria
+## Recursos principais
 
-O perfil de síndico não faz parte do sistema atual. Também não existe chat privado Morador ↔ Portaria: a comunicação do projeto é feita por avisos operacionais e pelo Mural coletivo.
+- cadastro, perfil, recuperação de senha e verificação de e-mail;
+- validação de CPF e telefone e controle de identificadores duplicados;
+- login por e-mail/senha e Google;
+- criação/vínculo de condomínio com aprovação de novas Portarias em condomínios existentes;
+- registro manual e por OCR de encomendas;
+- confirmação humana do morador sugerido pelo OCR;
+- código e confirmação de retirada;
+- histórico e auditoria de ações críticas;
+- previsões de entregas informadas pelo Morador;
+- Central de Avisos em tempo real;
+- push remoto quando backend/FCM estiver configurado;
+- lembrete automático de encomenda há mais de três dias via Cloud Function agendada, com fallback no painel da Portaria;
+- Mural em tempo real, filtro de linguagem imprópria, respostas, denúncias e moderação;
+- relatórios e indicadores para a Portaria;
+- acessibilidade, tema claro/escuro/sistema e tela de privacidade;
+- exclusão de conta com remoção de dados descartáveis e anonimização do histórico necessário;
+- identidade visual própria com ícone, splash e marca oficial do Cegonha.
 
-## Jeito mais simples de rodar
-
-O modo recomendado é o **Expo Go**. O OCR usa OCR.Space por HTTP e, portanto, não exige mais uma APK nativa para funcionar.
-
-Depois de atualizar o projeto:
+## Rodar o projeto
 
 ```bash
 git pull origin main
@@ -21,210 +32,97 @@ npm run setup
 npm start
 ```
 
-`npm run setup` instala as dependências, confere as versões esperadas pelo Expo SDK 57 e valida o TypeScript. `npm start` limpa o cache e abre o Expo Go.
+O modo mais simples para desenvolvimento continua sendo o **Expo Go**. OCR.Space, cadastro, perfil, encomendas, Mural, relatórios, previsões, avisos e Firestore funcionam nesse modo.
 
-### O que funciona no Expo Go
+Google Sign-In nativo e push remoto com o aplicativo fechado exigem development build/APK.
 
-- login por e-mail e senha;
-- cadastro e perfil;
-- condomínio;
-- encomendas e histórico;
-- confirmação de chegada;
-- OCR.Space pela câmera ou galeria;
-- Mural e denúncias;
-- relatórios;
-- previsões;
-- Central de Avisos;
-- Firestore em tempo real.
-
-Google Sign-In nativo e push remoto continuam sendo recursos de development build.
-
-## Comandos úteis
+### Comandos principais
 
 ```bash
-npm run setup                 # instala dependências e valida versões/TypeScript
-npm start                     # Expo Go, modo recomendado
-npm run check                 # versões + TypeScript + bundle Expo Go + Expo Doctor
-npm run typecheck             # verifica TypeScript
-npm run firebase:deploy       # publica somente regras do Firestore
-npm run rebuild:android       # gera APK para Google Sign-In nativo/push remoto
-npm run dev                   # abre a development build instalada
-npm run build:preview:android # gera APK de demonstração/preview
+npm run setup                 # instala e confere dependências
+npm start                     # Expo Go
+npm run dev                   # development build já instalada
+npm run check                 # versões + TS + testes locais + Expo Doctor
+npm run test:emulator         # fluxo completo + regras/ataques no Firebase Emulator
+npm run build:preview:android # APK preview via EAS
+npm run firebase:deploy       # somente Firestore Rules
+npm run firebase:deploy:backend # Rules + Cloud Functions
 ```
 
-## Firebase sem complicar o desenvolvimento
+## Firebase e backend
 
-O funcionamento básico do aplicativo não depende de Cloud Functions.
+O app básico funciona com Firestore sem depender das Functions. Entretanto, a versão final possui funções de backend para:
 
-Para publicar as regras atuais do Firestore:
+- push disparado por novas notificações;
+- lembrete diário de três dias, executado às 09:00 no fuso `America/Sao_Paulo`;
+- exclusão segura/anomização de conta.
+
+Para publicar apenas as regras:
 
 ```bash
 npm run firebase:deploy
 ```
 
-Esse comando **não publica Functions** e, portanto, não esbarra no plano Blaze apenas para testar o app.
-
-O backend opcional de push pode ser publicado separadamente:
+Para publicar a versão completa do backend:
 
 ```bash
 npm install --prefix functions
-npm run firebase:deploy:push
+npm run firebase:deploy:backend
 ```
 
-A publicação de Functions exige que o projeto Firebase permita Cloud Functions/Artifact Registry. Se o backend de push não estiver publicado, a Central de Avisos interna continua funcionando.
-
-## Segurança e integridade dos dados
-
-As regras do Firestore são a barreira de autorização do Cegonha e não confiam apenas nas validações das telas. Entre as proteções atuais estão:
-
-- acesso aos dados operacionais somente por usuários autenticados com e-mail verificado;
-- isolamento por condomínio e separação de permissões entre Morador e Portaria;
-- novas contas da Portaria em condomínio existente dependem de aprovação de uma Portaria já vinculada;
-- nomes, perfis e metadados de autoria são conferidos com o perfil autenticado para impedir impersonação por clientes modificados;
-- encomendas conferem Portaria, Morador, bloco e apartamento contra os registros reais do condomínio;
-- respostas, denúncias e banimentos do Mural são vinculados aos registros reais que originaram a ação;
-- endereço do condomínio fica em documento privado acessível apenas a contas vinculadas;
-- CPF, telefone e e-mail usam reservas de unicidade sem permitir leitura pública da coleção de identificadores;
-- o perfil completo não é persistido em cache local do aplicativo;
-- o CI usa instalações reproduzíveis, auditoria de dependências, testes com emuladores do Firebase e busca por assinaturas comuns de credenciais privadas.
-
-As regras versionadas no GitHub só passam a valer no projeto Firebase real depois de executar `npm run firebase:deploy` com uma conta autorizada. Chaves privadas, contas de serviço e outros segredos nunca devem ser versionados.
-
-## Recursos principais
-
-- cadastro e atualização de dados pessoais;
-- CPF e telefone com formatação/validação;
-- confirmação de e-mail no cadastro por e-mail/senha;
-- login por e-mail/senha e Google;
-- registro de encomendas pela Portaria;
-- histórico geral da Portaria e individual do Morador;
-- Central de Avisos para Morador e Portaria;
-- notificações automáticas de chegada, retirada, lembrete, vínculo, entrega prevista e denúncia;
-- push notifications com Expo Notifications quando o backend/FCM estiver configurado;
-- OCR de etiquetas via OCR.Space;
-- tentativa de leitura de nome, CPF, bloco e apartamento;
-- histórico das leituras OCR confirmadas;
-- Mural em tempo real, com filtro de linguagem imprópria, denúncia e moderação;
-- Central de Denúncias para ambos os perfis;
-- relatórios semanais e indicadores da Portaria;
-- localização/endereço do condomínio com abertura no app de mapas;
-- código do condomínio com opção de copiar;
-- pesquisa e filtros;
-- listeners do Firestore em tempo real;
-- tema claro, escuro ou conforme o sistema.
-
-## Comunicação entre Morador e Portaria
-
-A comunicação prevista pelo Cegonha é operacional e coletiva.
-
-### Portaria → Morador
-
-O Morador recebe avisos quando:
-
-- uma encomenda é registrada em seu nome;
-- uma retirada é confirmada;
-- uma encomenda permanece mais de 3 dias aguardando retirada;
-- uma solicitação de vínculo é aprovada ou rejeitada.
-
-### Morador → Portaria
-
-A Portaria recebe avisos quando:
-
-- um Morador solicita vínculo com o condomínio;
-- um Morador registra uma entrega prevista;
-- uma publicação do Mural é denunciada.
-
-### Comunicação geral
-
-Moradores e Portaria do mesmo condomínio usam o **Mural** para comunicação coletiva. Publicações possuem autor, perfil, data/hora, filtro de linguagem imprópria e sistema de denúncia/moderação.
-
-**Contato individual por chat não faz parte da proposta funcional do Cegonha.**
-
-## Confirmação de chegada
-
-A encomenda é o registro principal da confirmação. O fluxo foi estruturado para que falhas auxiliares de auditoria ou telemetria do OCR não cancelem a chegada inteira.
-
-O aviso ao Morador é criado logo após a encomenda. Se regras antigas do Firestore bloquearem esse aviso, a tela informa que a chegada foi registrada e orienta a publicar as regras atuais:
-
-```bash
-npm run firebase:deploy
-```
+Cloud Functions e Cloud Scheduler podem exigir faturamento habilitado no projeto Firebase. Se as Functions não estiverem publicadas, a Central de Avisos continua funcionando e o painel da Portaria mantém o fallback de lembrete, mas exclusão de conta e agendamento independente de aparelho dependem do backend.
 
 ## OCR.Space
 
-O OCR não usa mais biblioteca nativa. A tela comprime a imagem e envia uma cópia temporária ao endpoint HTTPS do OCR.Space. O texto retornado é analisado para tentar extrair nome, CPF, bloco e apartamento e então cruzado com os moradores do condomínio.
+A Portaria pode fotografar ou escolher uma etiqueta. A imagem é reduzida/comprimida e enviada temporariamente ao OCR.Space por HTTPS. O Cegonha tenta extrair nome, CPF, bloco e apartamento e cruza os dados com os moradores do condomínio.
 
-A foto da etiqueta **não é salva no Firestore nem anexada à encomenda**. O texto bruto reconhecido também não é persistido. Quando uma encomenda é confirmada, ficam somente os principais campos extraídos e métricas da leitura.
+**A foto da etiqueta e o texto bruto do OCR não são persistidos no Firestore.** A Portaria sempre confirma/corrige o morador antes de salvar a encomenda.
 
-Depois da leitura, a Portaria pode:
-
-- remover somente a foto da tela e manter os dados reconhecidos;
-- descartar a leitura inteira;
-- escolher um morador sugerido;
-- corrigir/buscar o morador manualmente.
-
-Para facilitar o primeiro teste, se nenhuma chave estiver configurada o app usa a chave pública `helloworld` do OCR.Space. Ela é apenas para testes rápidos e possui limite baixo. Para uso mais estável, crie `.env.local`:
+Para teste rápido, a aplicação pode usar a chave pública `helloworld`. Para uso mais estável, crie `.env.local`:
 
 ```env
 EXPO_PUBLIC_OCR_SPACE_API_KEY=sua_chave_aqui
 ```
 
-O plano gratuito do OCR.Space possui limite de tamanho; por isso o Cegonha reduz e comprime automaticamente a foto antes do envio.
+## Segurança
 
-## Login Google
+As regras do Firestore são a barreira principal de autorização e não confiam apenas na interface. O projeto aplica autenticação/e-mail verificado, isolamento por condomínio, separação Morador/Portaria, integridade de identidade e testes de ataque nos emuladores. Veja [`docs/SEGURANCA.md`](docs/SEGURANCA.md).
 
-No Android, o login Google continua usando `@react-native-google-signin/google-signin`. Ele é um recurso nativo e não roda no Expo Go. Para testar especificamente esse login:
+## Exclusão e privacidade
 
-```bash
-npm run rebuild:android
-```
+A tela **Privacidade e segurança** permite excluir a conta. A operação exige e-mail verificado, confirmação `EXCLUIR` e login recente. Dados descartáveis são apagados e registros históricos que precisam permanecer para rastreabilidade são anonimizados. Uma Portaria não pode excluir a própria conta se isso deixar o condomínio sem outra Portaria.
 
-Instale a APK e rode:
+Veja [`docs/PRIVACIDADE.md`](docs/PRIVACIDADE.md).
 
-```bash
-npm run dev
-```
+## Identidade visual e APK
 
-O package Android é:
+A marca oficial é a cegonha rosa em selo com efeito de impressão. `app.json` define ícone, splash, ícone adaptativo Android e favicon. O login e o onboarding usam a mesma marca por meio de `BrandLogo`.
 
-```text
-com.maymay79p.cegonha
-```
-
-Se a APK retornar `DEVELOPER_ERROR`, confira a SHA-1 da chave Android usada pelo EAS:
+O CI gera uma **APK Android release** e a armazena como artefato do workflow. Também é possível gerar uma preview via EAS:
 
 ```bash
-npx eas-cli@latest credentials -p android
+npm run build:preview:android
 ```
 
-Essa SHA-1 precisa estar cadastrada no cliente Android `com.maymay79p.cegonha` no Firebase/Google Cloud.
-
-## Push notifications
-
-A Central de Avisos interna funciona no Expo Go porque usa Firestore. O push remoto com o aplicativo fechado continua opcional e depende de `expo-notifications`, FCM/EAS e do backend configurado.
-
-No Expo Go o módulo de push remoto é substituído por um stub seguro. Para Android real, ainda é necessário configurar FCM V1/EAS. Não coloque chaves privadas ou arquivos de conta de serviço no repositório público. Veja `docs/PUSH_SETUP.md`.
+Veja [`docs/IDENTIDADE_VISUAL.md`](docs/IDENTIDADE_VISUAL.md).
 
 ## Validação automática
 
-O GitHub Actions:
+O workflow do GitHub Actions executa instalação reproduzível, auditoria de dependências, TypeScript, testes do parser OCR e buscas, Firebase Auth/Firestore Emulator com fluxo completo e ataques, Expo Doctor, bundle Expo Go, prebuild Android, build release da APK, testes das Functions e busca por padrões de segredos privados.
 
-- instala as dependências do app de forma reproduzível;
-- audita dependências de produção;
-- verifica se as versões são compatíveis com o Expo;
-- verifica TypeScript;
-- testa OCR e pesquisas do aplicativo;
-- executa os emuladores do Firebase para validar vínculo, autorização e ataques de integridade;
-- executa Expo Doctor;
-- gera o bundle do modo Expo Go;
-- executa `expo prebuild` para validar os recursos nativos opcionais;
-- instala, audita e testa o backend de push;
-- procura padrões comuns de credenciais privadas versionadas.
+O fluxo automatizado inclui cadastro/vínculo, chegada da encomenda, notificação, código, solicitação e confirmação de retirada, além de Mural e denúncias. Veja [`docs/TESTES.md`](docs/TESTES.md).
 
-## Observações
+## Documentação técnica
 
-O lembrete de encomenda com mais de 3 dias ainda é identificado quando a Portaria abre o aplicativo e o painel encontra a pendência. Para executar essa verificação sem nenhum aparelho aberto seria necessário um processo agendado no backend.
+- [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) — arquitetura e fluxos;
+- [`docs/MODELO_DE_DADOS.md`](docs/MODELO_DE_DADOS.md) — coleções e relações;
+- [`docs/SEGURANCA.md`](docs/SEGURANCA.md) — controles de segurança;
+- [`docs/PRIVACIDADE.md`](docs/PRIVACIDADE.md) — tratamento e exclusão de dados;
+- [`docs/TESTES.md`](docs/TESTES.md) — matriz de testes e validação;
+- [`docs/IDENTIDADE_VISUAL.md`](docs/IDENTIDADE_VISUAL.md) — marca e uso visual;
+- [`docs/RODAR_APP.md`](docs/RODAR_APP.md) — execução e build;
+- [`docs/PUSH_SETUP.md`](docs/PUSH_SETUP.md) — configuração de push.
 
-A localização do condomínio é cadastrada como endereço e aberta no aplicativo de mapas do dispositivo.
+## Escopo final do TCC
 
-Para o passo a passo de execução, veja `docs/RODAR_APP.md`.
+O Cegonha está estruturado como um sistema de gestão de encomendas, não como plataforma geral de administração condominial. Financeiro, visitantes, marketplace, chat privado e perfil de síndico são possíveis evoluções, mas não são necessárias ao objetivo atual do projeto.
