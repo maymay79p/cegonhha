@@ -18,8 +18,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Preparar patch resiliente
+        run: python scripts/prepare-repair-cegonha.py
+
       - name: Aplicar correcoes revisadas
         run: python scripts/repair-cegonha.py
+
+      - name: Limpar aplicador temporario
+        run: rm -f scripts/prepare-repair-cegonha.py
 
       - name: Conferir diff
         run: git diff --check
