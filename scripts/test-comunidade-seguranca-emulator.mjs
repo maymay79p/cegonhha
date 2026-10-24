@@ -141,6 +141,41 @@ try {
   const respostaSalva = await getDoc(respostaRef);
   assert.equal(respostaSalva.data()?.respostaParaId, originalRef.id, 'Resposta deve preservar a referência da mensagem respondida.');
 
+  const autorForjadoRef = doc(collection(db, 'mural'));
+  await assert.rejects(
+    setDoc(autorForjadoRef, {
+      condominioId: CONDOMINIO_ID,
+      autorId: moradorUid,
+      autorNome: 'Nome de Outra Pessoa',
+      autorTipo: 'morador',
+      texto: 'Tentativa de impersonar outro usuário no mural.',
+      criadoEm: serverTimestamp(),
+      criadoEmCliente: Date.now(),
+    }),
+    erro => String(erro?.code || '').includes('permission-denied'),
+    'O mural nao deve aceitar nome de autor diferente do perfil autenticado.',
+  );
+
+  const respostaMetadadosForjadosRef = doc(collection(db, 'mural'));
+  await assert.rejects(
+    setDoc(respostaMetadadosForjadosRef, {
+      condominioId: CONDOMINIO_ID,
+      autorId: moradorUid,
+      autorNome: 'Morador Teste',
+      autorTipo: 'morador',
+      texto: 'Resposta com metadados adulterados.',
+      respostaParaId: originalRef.id,
+      respostaParaAutorId: portariaUid,
+      respostaParaAutorNome: 'Nome adulterado',
+      respostaParaAutorTipo: 'morador',
+      respostaParaTexto: 'Texto exibido adulterado',
+      criadoEm: serverTimestamp(),
+      criadoEmCliente: Date.now(),
+    }),
+    erro => String(erro?.code || '').includes('permission-denied'),
+    'A resposta deve preservar nome e tipo reais do autor da publicacao original.',
+  );
+
   const respostaForjadaRef = doc(collection(db, 'mural'));
   await assert.rejects(
     setDoc(respostaForjadaRef, {
@@ -176,6 +211,26 @@ try {
     }),
     erro => String(erro?.code || '').includes('permission-denied'),
     'A denuncia precisa refletir a publicacao real e nao pode carregar texto adulterado.',
+  );
+
+  const denunciaIdentidadeForjadaRef = doc(collection(db, 'muralDenuncias'));
+  await assert.rejects(
+    setDoc(denunciaIdentidadeForjadaRef, {
+      condominioId: CONDOMINIO_ID,
+      comentarioId: originalRef.id,
+      comentarioTexto: 'Mensagem original da Portaria para validar respostas específicas.',
+      autorId: portariaUid,
+      autorNome: 'Portaria Teste',
+      autorTipo: 'porteiro',
+      denuncianteId: moradorUid,
+      denuncianteNome: 'Outra Pessoa',
+      motivo: 'Outro motivo',
+      detalhes: '',
+      criadoEm: serverTimestamp(),
+      status: 'pendente',
+    }),
+    erro => String(erro?.code || '').includes('permission-denied'),
+    'A denuncia nao deve permitir falsificar a identidade do denunciante.',
   );
 
   await entrar(PORTARIA_EMAIL);

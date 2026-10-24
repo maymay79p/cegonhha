@@ -143,6 +143,7 @@ service cloud.firestore {
       return request.resource.data.tipo == 'resposta_mural'
         && mesmoCondominio(request.resource.data.condominioId)
         && request.resource.data.remetenteId == request.auth.uid
+        && request.resource.data.remetenteNome == perfil().get('nome', '')
         && request.resource.data.destinatarioId is string
         && request.resource.data.destinatarioId.size() > 0
         && request.resource.data.destinatarioId != request.auth.uid
@@ -376,8 +377,14 @@ service cloud.firestore {
       allow create: if porteiro()
         && mesmoCondominio(request.resource.data.condominioId)
         && request.resource.data.porteiroId == request.auth.uid
+        && request.resource.data.porteiroNome == perfil().get('nome', '')
         && request.resource.data.moradorId is string
         && moradorNoCondominio(request.resource.data.moradorId, request.resource.data.condominioId)
+        && request.resource.data.moradorNome == get(/databases/$(database)/documents/usuarios/$(request.resource.data.moradorId)).data.get('nome', '')
+        && request.resource.data.get('bloco', '') == get(/databases/$(database)/documents/usuarios/$(request.resource.data.moradorId)).data.get('bloco', '')
+        && request.resource.data.get('apartamento', '') == get(/databases/$(database)/documents/usuarios/$(request.resource.data.moradorId)).data.get('apartamento', '')
+        && request.resource.data.origem in ['manual','ocr']
+        && request.resource.data.get('ocrScore', 0) is number
         && request.resource.data.status == 'pendente'
         && request.resource.data.codigoRetirada is string
         && request.resource.data.codigoRetirada.matches('^[0-9]{6}$')
@@ -401,7 +408,13 @@ service cloud.firestore {
           'moradorNotificadoEm','historico','lembrete3dEnviado','status','retiradaEm',
           'retiradaPorId','retiradaPorNome','retiradaRecebedorNome','codigoRetiradaConfirmado'
         ])
-        && (request.resource.data.status != 'retirada' || request.resource.data.retiradaPorId == request.auth.uid);
+        && request.resource.data.get('retiradaRecebedorNome', '') is string
+        && request.resource.data.get('retiradaRecebedorNome', '').size() <= 120
+        && request.resource.data.get('codigoRetiradaConfirmado', false) is bool
+        && (request.resource.data.status != 'retirada' || (
+          request.resource.data.retiradaPorId == request.auth.uid
+          && request.resource.data.retiradaPorNome == perfil().get('nome', '')
+        ));
       allow delete: if false;
       allow read: if logado() && (
         (porteiro() && mesmoCondominio(resource.data.condominioId)) ||
@@ -557,6 +570,7 @@ service cloud.firestore {
     match /ocrLeituras/{id} {
       allow create: if porteiro()
         && request.resource.data.porteiroId == request.auth.uid
+        && request.resource.data.porteiroNome == perfil().get('nome', '')
         && mesmoCondominio(request.resource.data.condominioId);
       allow read: if porteiro() && mesmoCondominio(resource.data.condominioId);
       allow update, delete: if false;
@@ -565,6 +579,7 @@ service cloud.firestore {
     match /ocrTestes/{id} {
       allow create: if porteiro()
         && request.resource.data.porteiroId == request.auth.uid
+        && request.resource.data.porteiroNome == perfil().get('nome', '')
         && mesmoCondominio(request.resource.data.condominioId);
       allow read: if porteiro() && mesmoCondominio(resource.data.condominioId);
       allow update, delete: if false;
@@ -573,6 +588,12 @@ service cloud.firestore {
     match /auditoria/{id} {
       allow create: if porteiro()
         && request.resource.data.atorId == request.auth.uid
+        && request.resource.data.atorNome == perfil().get('nome', '')
+        && request.resource.data.acao is string
+        && request.resource.data.acao.size() > 0
+        && request.resource.data.acao.size() <= 80
+        && request.resource.data.get('detalhe', '') is string
+        && request.resource.data.get('detalhe', '').size() <= 500
         && mesmoCondominio(request.resource.data.condominioId);
       allow read: if logado() && (
         (porteiro() && mesmoCondominio(resource.data.condominioId)) ||
@@ -584,8 +605,13 @@ service cloud.firestore {
     match /mural/{id} {
       allow read: if logado() && mesmoCondominio(resource.data.condominioId);
       allow create: if logado()
+        && request.resource.data.keys().hasOnly([
+          'condominioId','autorId','autorNome','autorTipo','texto','criadoEm','criadoEmCliente',
+          'respostaParaId','respostaParaAutorId','respostaParaAutorNome','respostaParaAutorTipo','respostaParaTexto'
+        ])
         && mesmoCondominio(request.resource.data.condominioId)
         && request.resource.data.autorId == request.auth.uid
+        && request.resource.data.autorNome == perfil().get('nome', '')
         && request.resource.data.autorNome is string
         && request.resource.data.autorNome.size() > 0
         && request.resource.data.autorNome.size() <= 120
@@ -605,6 +631,10 @@ service cloud.firestore {
             && exists(/databases/$(database)/documents/mural/$(request.resource.data.respostaParaId))
             && get(/databases/$(database)/documents/mural/$(request.resource.data.respostaParaId)).data.condominioId == request.resource.data.condominioId
             && get(/databases/$(database)/documents/mural/$(request.resource.data.respostaParaId)).data.autorId == request.resource.data.respostaParaAutorId
+            && request.resource.data.respostaParaAutorNome == get(/databases/$(database)/documents/mural/$(request.resource.data.respostaParaId)).data.autorNome
+            && request.resource.data.respostaParaAutorTipo == get(/databases/$(database)/documents/mural/$(request.resource.data.respostaParaId)).data.autorTipo
+            && request.resource.data.respostaParaTexto is string
+            && request.resource.data.respostaParaTexto.size() <= 180
           )
         );
       allow update: if false;
@@ -615,8 +645,13 @@ service cloud.firestore {
 
     match /muralDenuncias/{id} {
       allow create: if logado()
+        && request.resource.data.keys().hasOnly([
+          'condominioId','comentarioId','comentarioTexto','autorId','autorNome','autorTipo',
+          'denuncianteId','denuncianteNome','motivo','detalhes','criadoEm','status'
+        ])
         && mesmoCondominio(request.resource.data.condominioId)
         && request.resource.data.denuncianteId == request.auth.uid
+        && request.resource.data.denuncianteNome == perfil().get('nome', '')
         && request.resource.data.autorId != request.auth.uid
         && request.resource.data.comentarioId is string
         && request.resource.data.comentarioId.size() > 0
@@ -629,6 +664,8 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/mural/$(request.resource.data.comentarioId))
         && get(/databases/$(database)/documents/mural/$(request.resource.data.comentarioId)).data.condominioId == request.resource.data.condominioId
         && get(/databases/$(database)/documents/mural/$(request.resource.data.comentarioId)).data.autorId == request.resource.data.autorId
+        && request.resource.data.autorNome == get(/databases/$(database)/documents/mural/$(request.resource.data.comentarioId)).data.autorNome
+        && request.resource.data.autorTipo == get(/databases/$(database)/documents/mural/$(request.resource.data.comentarioId)).data.autorTipo
         && request.resource.data.comentarioTexto == get(/databases/$(database)/documents/mural/$(request.resource.data.comentarioId)).data.texto;
       allow read: if logado() && (
         resource.data.denuncianteId == request.auth.uid ||
@@ -652,9 +689,23 @@ service cloud.firestore {
       );
       allow list: if porteiro() && mesmoCondominio(resource.data.condominioId);
       allow create, update: if porteiro()
+        && request.resource.data.keys().hasOnly([
+          'usuarioId','usuarioNome','condominioId','ativo','banidoPorId','banidoPorNome','atualizadoEm',
+          'banidoEm','desbanidoEm','desbanidoPorId','desbanidoPorNome'
+        ])
         && mesmoCondominio(request.resource.data.condominioId)
         && request.resource.data.usuarioId is string
         && usuarioNoCondominio(request.resource.data.usuarioId, request.resource.data.condominioId)
+        && request.resource.data.usuarioNome == get(/databases/$(database)/documents/usuarios/$(request.resource.data.usuarioId)).data.get('nome', '')
+        && request.resource.data.ativo is bool
+        && (
+          (request.resource.data.ativo == true
+            && request.resource.data.banidoPorId == request.auth.uid
+            && request.resource.data.banidoPorNome == perfil().get('nome', '')) ||
+          (request.resource.data.ativo == false
+            && request.resource.data.desbanidoPorId == request.auth.uid
+            && request.resource.data.desbanidoPorNome == perfil().get('nome', ''))
+        )
         && id == request.resource.data.condominioId + '_' + request.resource.data.usuarioId;
       allow delete: if false;
     }
@@ -662,10 +713,12 @@ service cloud.firestore {
     match /muralBanimentosPublicos/{id} {
       allow read: if logado() && mesmoCondominio(resource.data.condominioId);
       allow create, update: if porteiro()
+        && request.resource.data.keys().hasOnly(['usuarioId','usuarioNome','condominioId','ativo','atualizadoEm'])
         && mesmoCondominio(request.resource.data.condominioId)
         && request.resource.data.usuarioId is string
         && request.resource.data.usuarioId.size() > 0
         && usuarioNoCondominio(request.resource.data.usuarioId, request.resource.data.condominioId)
+        && request.resource.data.usuarioNome == get(/databases/$(database)/documents/usuarios/$(request.resource.data.usuarioId)).data.get('nome', '')
         && request.resource.data.usuarioNome is string
         && request.resource.data.usuarioNome.size() > 0
         && request.resource.data.ativo is bool
