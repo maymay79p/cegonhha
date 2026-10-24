@@ -3,6 +3,7 @@ import { getApps, initializeApp } from 'firebase/app';
 import { getAuth, initializeAuth } from 'firebase/auth';
 import * as firebaseAuth from 'firebase/auth';
 import { getFirestore, initializeFirestore } from 'firebase/firestore';
+import { getFunctions } from 'firebase/functions';
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'AIzaSyDSzJKJvm1rpnSIslT9bszZTQgK1XQs0Lw',
@@ -24,10 +25,6 @@ try {
   auth = getAuth(app);
 }
 
-// Proteção adicional: o Firestore normalmente rejeita qualquer campo `undefined`,
-// inclusive quando ele aparece dentro de arrays/objetos aninhados. Mantemos os
-// serviços normalizando os dados e também ativamos esta salvaguarda global para
-// que um campo opcional esquecido não derrube uma operação inteira.
 let db;
 try {
   db = initializeFirestore(app, { ignoreUndefinedProperties: true });
@@ -35,4 +32,6 @@ try {
   db = getFirestore(app);
 }
 
-export { app, auth, db };
+const functions = getFunctions(app, 'southamerica-east1');
+
+export { app, auth, db, functions };
