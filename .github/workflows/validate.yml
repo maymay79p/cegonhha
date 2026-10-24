@@ -4,70 +4,67 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, feat/revisao-completa-cegonha]
+    branches: [main, feat/revisao-completa-cegonha, chore/finalizacao-tcc]
 
 jobs:
   typecheck:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - name: Baixar código
         uses: actions/checkout@v4
-
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22.13.1
           cache: npm
-
       - name: Configurar Java 21
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
-
       - name: Instalar dependências reproduzíveis do app
         run: npm ci --no-audit --no-fund
-
       - name: Bloquear vulnerabilidades críticas no app
         run: npm audit --omit=dev --audit-level=critical
-
       - name: Confirmar versão corrigida do gRPC
         run: npm ls @grpc/grpc-js
-
       - name: Conferir versões esperadas pelo Expo
         run: npx expo install --check
-
       - name: Verificar TypeScript
         run: npm run typecheck
-
       - name: Testar parser de etiquetas OCR
         run: npm run test:ocr
-
       - name: Testar pesquisas do aplicativo
         run: npm run test:busca
-
-      - name: Validar vínculo e regras do Firestore
+      - name: Validar fluxo completo e regras do Firestore
         run: npx firebase-tools@latest emulators:exec --only auth,firestore --project demo-cegonha "node scripts/test-vinculo-emulator.mjs && node scripts/test-comunidade-seguranca-emulator.mjs"
-
       - name: Executar Expo Doctor
         run: npx expo-doctor@latest
-
       - name: Validar bundle do Expo Go
         run: npm run check:expo-go
-
-      - name: Validar prebuild Android dos recursos nativos opcionais
+      - name: Gerar projeto Android nativo
         run: npx expo prebuild --platform android --clean --no-install
-
+      - name: Gerar APK Android de demonstração
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x android/gradlew
+          cd android
+          ./gradlew assembleRelease --no-daemon
+      - name: Guardar APK validada
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cegonha-Android-${{ github.sha }}
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
       - name: Instalar dependências reproduzíveis das Functions
         run: npm ci --prefix functions --no-audit --no-fund
-
       - name: Auditar dependências das Functions
         run: npm audit --prefix functions --omit=dev --audit-level=high
-
-      - name: Testar push notifications
+      - name: Testar backend e push notifications
         run: npm test --prefix functions
-
       - name: Procurar assinaturas de credenciais privadas no estado atual
         shell: bash
         run: |
